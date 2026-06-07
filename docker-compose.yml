@@ -1,0 +1,83 @@
+version: "3.9"
+
+# ============================================================
+# CodeTasker — Docker Compose
+# Starts: MongoDB + Go Fiber backend + React Vite frontend
+# Usage: docker-compose up --build
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # MongoDB — primary datastore
+  # ----------------------------------------------------------
+  mongo:
+    image: mongo:7.0
+    container_name: codetasker_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: codetasker
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------
+  # Go Fiber Backend API
+  # ----------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: codetasker_backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      MONGO_URI: mongodb://mongo:27017
+      DB_NAME: codetasker
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost:8080/api/auth/github/callback}
+      JWT_SECRET: ${JWT_SECRET}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      TOKEN_ENCRYPT_KEY: ${TOKEN_ENCRYPT_KEY}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ----------------------------------------------------------
+  # React Vite Frontend (dev mode with HMR)
+  # ----------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: codetasker_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    volumes:
+      # Mount source for hot-module replacement
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+    ports:
+      - "5173:5173"
+
+volumes:
+  mongo_data:
+    driver: local
