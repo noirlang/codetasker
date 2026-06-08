@@ -1,0 +1,118 @@
+/* ============================================================
+   CodeTasker — Global Styles
+   Tailwind base → components → utilities
+   ============================================================ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base resets ──────────────────────────────────────────── */
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: #0a0a0a;
+    color: #ffffff;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar — subtle and dark */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #111111;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #3a3a3a;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #4a4a4a;
+  }
+
+  /* Remove default focus ring, replaced with border-based focus */
+  :focus {
+    outline: none;
+  }
+}
+
+/* ── Reusable component classes ───────────────────────────── */
+@layer components {
+  /* Primary action button: white fill → transparent on hover */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2
+           bg-white text-black text-sm font-medium
+           rounded border border-white
+           transition-all duration-150
+           hover:bg-transparent hover:text-white
+           cursor-pointer select-none;
+  }
+
+  /* Secondary button: transparent with border */
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2
+           bg-transparent text-white text-sm font-medium
+           rounded border border-[#3a3a3a]
+           transition-all duration-150
+           hover:border-white
+           cursor-pointer select-none;
+  }
+
+  /* Ghost button: no border, just text */
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-1.5
+           bg-transparent text-[#a0a0a0] text-sm font-medium
+           rounded transition-all duration-150
+           hover:text-white hover:bg-[#1a1a1a]
+           cursor-pointer select-none;
+  }
+
+  /* Standard card */
+  .card {
+    @apply bg-[#1a1a1a] border border-[#2a2a2a] rounded;
+  }
+
+  /* Elevated card (selected / hover state) */
+  .card-elevated {
+    @apply bg-[#242424] border border-[#3a3a3a] rounded;
+  }
+
+  /* Side panel */
+  .panel {
+    @apply bg-[#111111] border-r border-[#2a2a2a];
+  }
+
+  /* Text input / textarea */
+  .input {
+    @apply w-full bg-[#111111] border border-[#3a3a3a] rounded
+           px-3 py-2 text-white text-sm placeholder-[#666666]
+           focus:outline-none focus:border-white
+           transition-colors duration-150;
+  }
+
+  /* Monospace tag pill */
+  .tag {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-mono
+           rounded border border-[#3a3a3a] text-[#a0a0a0];
+  }
+
+  /* Subtle section heading */
+  .section-label {
+    @apply text-xs font-medium uppercase tracking-widest text-[#666666];
+  }
+}
