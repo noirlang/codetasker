@@ -14,7 +14,7 @@ export default defineConfig({
       // Proxy all /api requests to the Go backend running on :8080.
       // This allows the frontend dev server to avoid CORS issues during development.
       '/api': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:8080',
         changeOrigin: true,
         // Keep cookies intact so the httpOnly session cookie is forwarded correctly.
         secure: false,

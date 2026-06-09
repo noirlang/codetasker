@@ -70,7 +70,7 @@ services:
     depends_on:
       - backend
     environment:
-      VITE_API_BASE_URL: http://localhost:8080
+      VITE_API_BASE_URL: http://backend:8080
     volumes:
       # Mount source for hot-module replacement
       - ./frontend/src:/app/src
