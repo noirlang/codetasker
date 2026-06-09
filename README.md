@@ -1,40 +1,41 @@
-# CodeTasker — İki Yönlü GitHub TODO & Görev Yönetim Platformu
+# CodeTasker — Two-Way GitHub TODO & Task Management Platform
 
-> Yazılımcıların kod içerisine bıraktığı geçici notları (`// TODO:`, `// FIXME:`, `// BUG:`) otomatik olarak takip edilebilir Kanban panolarına dönüştüren ve bu görevleri çift yönlü senkronize eden akıllı bir SaaS platformu.
-
----
-
-## Neden CodeTasker? (Projenin Doğuş Amacı)
-
-Yazılım geliştirme süreçlerinde, iş planlama araçları (Jira, Trello, GitHub Issues vb.) ile gerçekte yazılan kodlar arasında her zaman ciddi bir **kopukluk** yaşanır. Yazılımcılar kod yazarken karşılaştıkları küçük eksikleri, düzeltilmesi gereken hataları veya gelecekte yapılması gereken işleri kodun içine anlık olarak `// TODO:` veya `// FIXME:` yorum satırları olarak bırakırlar. 
-
-Çoğu zaman bu yorum satırları kod tabanının derinliklerinde **unutulur, kaybolur** ve teknik borç (technical debt) olarak birikmeye devam eder. Her küçük detay için Jira'da kart açmak yazılımcı için büyük bir zaman kaybı ve bürokratik bir yük yaratır.
-
-CodeTasker, bu iki dünyayı birleştirerek yazılımcının çalışma alışkanlıklarını bozmadan iş takibini otomatikleştirmek için geliştirilmiştir.
+> An intelligent B2B SaaS platform that automatically syncs code annotations (`// TODO:`, `// FIXME:`, `// BUG:`) into trackable Kanban boards, keeping your codebase and project management tools in perfect harmony.
 
 ---
 
-## Büyük ve Orta Ölçekli Şirketlerde Görev Dağılımı ve Yönetimi
+## Why CodeTasker? (The Core Problem)
 
-### 1. Büyük Ölçekli Şirketler (Enterprise)
-* **Zorluk:** Büyük şirketlerde yüzlerce yazılımcı, onlarca farklı mikro servis ve depo (repository) üzerinde çalışır. Ekipler birbirlerinin kod tabanlarından ve oraya bırakılan geçici işlerden habersizdir. Jira veya benzeri araçlar devasa boyutlara ulaşır, karmaşıklaşır ve hantallaşır.
-* **Çözüm:** CodeTasker, şirket genelindeki tüm depolarda kodun içerisine yazılan her bir TODO veya bug notunu tek bir merkezde toplar. Böylece ürün yöneticileri (Product Owners) ve mühendislik direktörleri, kod seviyesindeki gerçek teknik eksiklikleri ve yapılması gereken işleri hiçbir yazılımcıyı darlamadan, otomatik olarak görebilirler.
+In software development, there is a constant **disconnect** between project planning tools (like Jira, Trello, or GitHub Issues) and the actual code written. Developers often encounter minor bugs, unfinished tasks, or future improvements while coding. To stay focused, they leave quick annotations like `// TODO:` or `// FIXME:` inline.
 
-### 2. Orta Ölçekli Şirketler & Hızlı Büyüyen Ekipler (Scale-up & Mid-Market)
-* **Zorluk:** Orta ölçekli firmalarda en önemli kriter **hızdır**. Bürokrasiyi azaltmak, gereksiz toplantılardan kaçınmak ve odaklanmış geliştirme yapmak hayati önem taşır. Ancak büyüyen ekiplerde kimin neyi yapacağı, kodun neresinde hangi eksikliklerin kaldığı takip edilemez hale gelir.
-* **Çözüm:** Yazılımcılar iş planlama araçlarında vakit kaybetmek yerine doğrudan kod yazarlar. Kodlarını depoya (GitHub) gönderdikleri (push) an, CodeTasker arka planda değişikliği algılar ve Kanban tahtasını günceller. Görevin durumu kodda değişirse panoda da değişir; panoda değişirse koda Pull Request (PR) olarak geri yansır. Sıfır bürokrasi, maksimum hız.
+Unfortunately, these comments frequently get **lost and forgotten** in the depths of the codebase, accumulating as silent technical debt. Opening a Jira ticket for every single detail is tedious, causing administrative overhead and disrupting the developer's flow.
+
+CodeTasker bridges these two worlds. It automates task tracking directly from the developer's natural workspace—the codebase.
 
 ---
 
-## Temel Özellikler
+## Task Distribution in Large & Mid-Sized Organizations
 
-* **Koddan Panoya Senkronizasyon (Push-to-Sync):** Kodunuzda yaptığınız değişikliklerde yeni bir TODO eklediğinizde veya sildiğinizde, platform bunu anında algılar ve ekibin ortak Kanban panosuna yansıtır.
-* **Panodan Koda Senkronizasyon (Task Injection):** Doğrudan tarayıcı panosundan kodun belirli bir satırına yeni bir görev (yorum satırı) ekleyebilirsiniz. CodeTasker bunu arka planda otomatik olarak yeni bir dal (branch) açıp, ilgili satıra yorumu ekleyip bir **Pull Request (PR)** oluşturarak yapar.
-* **Gelişmiş Commit & İş Birliği Takibi:** Dal birleştirme (merge), commit geçmişini inceleme ve commits/PR'lara çalışma arkadaşlarını (Co-authors) ekleme özellikleriyle tam entegre çalışır.
-* **Güvenli JWT & Rol Yönetimi:** Ekiplerin yetki sınırlarını korumak için rol tabanlı erişim kontrolü sunar.
+### 1. Large Enterprises
+* **The Challenge:** Enterprise companies handle hundreds of developers working across dozens of microservices and repositories. Teams often have no visibility into each other's codebases or transient tasks left in code. Jira boards become bloated, slow, and hard to align with actual development progress.
+* **The Solution:** CodeTasker aggregates all inline TODOs and bug reports across all repositories into a single, unified panel. Product Owners and Engineering Directors can track real technical debt and pending tasks automatically, without having to badger developers.
+
+### 2. Mid-Sized & Fast-Growing Teams (Scale-ups)
+* **The Challenge:** In mid-sized teams, **velocity is everything**. Reducing bureaucracy, minimizing status meetings, and maintaining focused coding cycles is critical. However, tracking who is working on what—and where code omissions exist—becomes chaotic as the team scales.
+* **The Solution:** Developers focus entirely on writing code. The moment they push code to GitHub, CodeTasker detects the changes in the background and updates the Kanban board instantly. If a task status changes in code, the board updates. If they need to assign a task from the board, they can inject a TODO back into the code via a Pull Request. Zero friction, maximum speed.
 
 ---
 
-## Lisans
+## Key Features
 
-GNU General Public License v3.0 (GPL-3.0) - Detaylar için [LICENSE](LICENSE) dosyasına göz atabilirsiniz.
+* **Push-to-Sync (Code to Board):** Adding or removing a TODO in your code immediately updates the shared Kanban board.
+* **Task Injection (Board to Code):** Assign a task directly to the code from the board. CodeTasker creates a new branch, inserts the comment at the specified line, and opens a **Pull Request (PR)** automatically.
+* **Language-Sensitive Commenting:** Automatically detects file types to insert the correct comment syntax (e.g., `#` for Python, `--` for SQL, `//` for Go/TS).
+* **Collaborative Commit History:** View branch commits, manage collaborator permissions, merge branches, and include **Co-authors** directly from the UI.
+* **Security First:** Features verified webhooks (HMAC-SHA256), encrypted access tokens (AES-256-GCM), and secure authentication cookies.
+
+---
+
+## License
+
+GNU General Public License v3.0 (GPL-3.0) - See the [LICENSE](LICENSE) file for details.
