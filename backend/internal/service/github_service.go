@@ -568,6 +568,29 @@ func (s *GithubService) MergeBranch(ctx context.Context, userID primitive.Object
 	return resp, nil
 }
 
+// GetRepository fetches repository details including the default branch.
+func (s *GithubService) GetRepository(ctx context.Context, userID primitive.ObjectID, owner, repo string) (*github.Repository, error) {
+	if err := validateName(owner, "owner"); err != nil {
+		return nil, err
+	}
+	if err := validateName(repo, "repo"); err != nil {
+		return nil, err
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("GetRepository resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	r, _, err := client.Repositories.Get(ctx, owner, repo)
+	if err != nil {
+		return nil, fmt.Errorf("GetRepository GitHub API: %w", err)
+	}
+
+	return r, nil
+}
+
 // getCommentPrefix detects the appropriate comment prefix based on the file extension.
 func getCommentPrefix(filePath string) string {
 	parts := strings.Split(filePath, "/")
@@ -596,4 +619,5 @@ func getCommentPrefix(filePath string) string {
 	}
 	return "//"
 }
+
 

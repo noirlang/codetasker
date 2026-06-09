@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand';
-import { tasksApi } from '../api/client';
+import { tasksApi, reposApi } from '../api/client';
 import type { Task, TaskStatus, InjectTaskRequest, ApiError } from '../types';
 
 // ── State shape ────────────────────────────────────────────────────────────
@@ -51,6 +51,11 @@ interface TaskState {
    * Used internally for optimistic updates; also exposed for testing.
    */
   optimisticallyUpdateStatus: (id: string, status: TaskStatus) => void;
+
+  /**
+   * Manually trigger sync and refetch tasks.
+   */
+  syncRepoTasks: (owner: string, repoName: string, repoId: number) => Promise<void>;
 }
 
 // ── Store implementation ───────────────────────────────────────────────────
@@ -143,5 +148,23 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         t.id === id ? { ...t, status, updated_at: new Date().toISOString() } : t
       ),
     }));
+  },
+
+  // ── Sync repo tasks ──────────────────────────────────────────────────────
+
+  syncRepoTasks: async (owner: string, repoName: string, repoId: number) => {
+    set({ isLoading: true, error: null });
+    try {
+      await reposApi.syncTasks(owner, repoName);
+      const tasks = await tasksApi.getByRepo(repoId);
+      set({ tasks: tasks || [], isLoading: false });
+    } catch (err) {
+      const apiErr = err as ApiError;
+      set({
+        error: apiErr.message ?? 'Failed to sync tasks.',
+        isLoading: false,
+      });
+      throw err;
+    }
   },
 }));

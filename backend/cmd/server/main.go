@@ -87,7 +87,7 @@ func main() {
 
 	// Controllers
 	authCtrl := controller.NewAuthController(authService)
-	repoCtrl := controller.NewRepoController(cfg, githubService, syncedRepo, collaboratorRepo, userRepo)
+	repoCtrl := controller.NewRepoController(cfg, githubService, taskService, syncedRepo, collaboratorRepo, userRepo)
 	webhookCtrl := controller.NewWebhookController(taskService)
 	taskCtrl := controller.NewTaskController(taskService, githubService, syncedRepo, collaboratorRepo)
 

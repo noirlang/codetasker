@@ -24,6 +24,7 @@ import {
   Users,
   GitCommit,
   GitPullRequest,
+  RefreshCw,
 } from 'lucide-react';
 import { reposApi } from '../api/client';
 import { useTaskStore } from '../store/taskStore';
@@ -231,7 +232,22 @@ export default function RepoView() {
 
   const tasks = useTaskStore((s) => s.tasks);
   const linkTaskToPR = useTaskStore((s) => s.linkTaskToPR);
+  const syncRepoTasks = useTaskStore((s) => s.syncRepoTasks);
   const [repoId, setRepoId] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSync = useCallback(async () => {
+    if (isSyncing || !repoId) return;
+    setIsSyncing(true);
+    try {
+      await syncRepoTasks(owner, repoName, repoId);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      alert(apiErr.message ?? 'Failed to sync tasks.');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [owner, repoName, repoId, isSyncing, syncRepoTasks]);
 
   // Resolve repository ID from the user's repository list
   useEffect(() => {
@@ -386,14 +402,26 @@ export default function RepoView() {
           </span>
         </div>
 
-        <button
-          className="btn-secondary py-1 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
-          onClick={() => setCollabOpen(true)}
-          title="Manage Collaborators"
-        >
-          <Users size={13} />
-          <span>Collaborators</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="btn-secondary py-1 px-3 text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            onClick={handleSync}
+            disabled={isSyncing || !repoId}
+            title="Sync tasks from codebase"
+          >
+            <RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync codebase'}</span>
+          </button>
+
+          <button
+            className="btn-secondary py-1 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
+            onClick={() => setCollabOpen(true)}
+            title="Manage Collaborators"
+          >
+            <Users size={13} />
+            <span>Collaborators</span>
+          </button>
+        </div>
       </div>
 
       {/* Three-pane body */}

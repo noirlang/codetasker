@@ -189,3 +189,13 @@ func (r *TaskRepository) DeleteByRepo(ctx context.Context, repoID int64) error {
 
 	return nil
 }
+
+// DeleteTask removes a single task by its ObjectID.
+func (r *TaskRepository) DeleteTask(ctx context.Context, id primitive.ObjectID) error {
+	_, err := r.col.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		return fmt.Errorf("DeleteTask(%s): %w", id.Hex(), err)
+	}
+	return nil
+}
+

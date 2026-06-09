@@ -20,6 +20,7 @@ import (
 type RepoController struct {
 	cfg              *config.Config
 	githubService    *service.GithubService
+	taskService      *service.TaskService
 	syncedRepoRepo   *repository.SyncedRepository
 	collaboratorRepo *repository.CollaboratorRepository
 	userRepo         *repository.UserRepository
@@ -29,6 +30,7 @@ type RepoController struct {
 func NewRepoController(
 	cfg *config.Config,
 	githubService *service.GithubService,
+	taskService *service.TaskService,
 	syncedRepoRepo *repository.SyncedRepository,
 	collaboratorRepo *repository.CollaboratorRepository,
 	userRepo *repository.UserRepository,
@@ -36,6 +38,7 @@ func NewRepoController(
 	return &RepoController{
 		cfg:              cfg,
 		githubService:    githubService,
+		taskService:      taskService,
 		syncedRepoRepo:   syncedRepoRepo,
 		collaboratorRepo: collaboratorRepo,
 		userRepo:         userRepo,
@@ -49,6 +52,7 @@ func (rc *RepoController) RegisterRoutes(group fiber.Router) {
 	group.Get("/repos/:owner/:repo/contents", rc.GetContents)
 	group.Put("/repos/:owner/:repo/contents", rc.UpdateContents)
 	group.Post("/repos/:owner/:repo/webhook", rc.CreateWebhook)
+	group.Post("/repos/:owner/:repo/sync", rc.SyncRepoTasks)
 	group.Get("/repos/:owner/:repo/commits", rc.GetCommits)
 	group.Get("/repos/:owner/:repo/pulls", rc.GetPulls)
 	group.Post("/repos/:owner/:repo/merge", rc.MergeBranch)
@@ -1025,5 +1029,56 @@ func (rc *RepoController) RemoveCollaborator(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "collaborator removed successfully",
+	})
+}
+
+// SyncRepoTasks triggers a manual synchronization of tasks from the repository codebase.
+// Route: POST /api/repos/:owner/:repo/sync
+func (rc *RepoController) SyncRepoTasks(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+
+	synced, err := rc.syncedRepoRepo.FindByRepoName(c.Context(), owner+"/"+repo)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "database_error",
+			"message": err.Error(),
+		})
+	}
+	if synced == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "not_found",
+			"message": "Repository is not synced in CodeTasker",
+		})
+	}
+
+	// Verify collaborator permissions
+	if synced.UserID != userID {
+		collab, _ := rc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
+		if collab == nil || (collab.Role != domain.RoleOwner && collab.Role != domain.RoleMaintainer && collab.Role != domain.RoleDeveloper) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "forbidden",
+				"message": "You do not have permissions to sync tasks in this repository",
+			})
+		}
+	}
+
+	// Trigger tasks sync
+	if err := rc.taskService.SyncTasks(c.Context(), userID, synced.RepoID, owner, repo); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "sync_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Repository tasks synced successfully",
 	})
 }

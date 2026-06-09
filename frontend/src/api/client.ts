@@ -267,6 +267,14 @@ export const reposApi = {
     );
     return data;
   },
+
+  /**
+   * Manually sync tasks for a repository.
+   * POST /api/repos/:owner/:repo/sync
+   */
+  syncTasks: async (owner: string, repo: string): Promise<void> => {
+    await client.post(`/repos/${owner}/${repo}/sync`);
+  },
 };
 
 // ── Tasks API ──────────────────────────────────────────────────────────────

@@ -7,6 +7,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/codetasker/backend/internal/domain"
@@ -326,4 +328,208 @@ func (s *TaskService) UpsertInjectedTask(ctx context.Context, task *domain.Task)
 	)
 
 	return nil
+}
+
+// SyncTasks fetches the entire codebase (recursive tree of the default branch),
+// parses all code files for tasks, updates MongoDB with the current list of tasks,
+// and deletes tasks that are no longer in the codebase.
+func (s *TaskService) SyncTasks(ctx context.Context, userID primitive.ObjectID, repoID int64, owner, repo string) error {
+	// 1. Get the repository details to find the default branch.
+	r, err := s.githubService.GetRepository(ctx, userID, owner, repo)
+	if err != nil {
+		return fmt.Errorf("SyncTasks GetRepository: %w", err)
+	}
+	defaultBranch := r.GetDefaultBranch()
+	if defaultBranch == "" {
+		defaultBranch = "main" // fallback
+	}
+
+	// 2. Get the recursive file tree of the default branch.
+	tree, err := s.githubService.GetTree(ctx, userID, owner, repo, defaultBranch)
+	if err != nil {
+		return fmt.Errorf("SyncTasks GetTree: %w", err)
+	}
+
+	// 3. Collect code file paths.
+	var filesToFetch []string
+	for _, entry := range tree.Entries {
+		if entry.GetType() == "blob" {
+			path := entry.GetPath()
+			size := entry.GetSize()
+			// Skip ignored directories/files and large files (> 1MB)
+			if size <= 1000000 && !s.isIgnoredPath(path) {
+				filesToFetch = append(filesToFetch, path)
+			}
+		}
+	}
+
+	if len(filesToFetch) == 0 {
+		s.log.Info("SyncTasks: no scan-worthy files found", zap.String("repo", owner+"/"+repo))
+		// Clean up all tasks if no files found
+		return s.taskRepo.DeleteByRepo(ctx, repoID)
+	}
+
+	// 4. Fetch the content of all collected files concurrently.
+	type fetchResult struct {
+		path    string
+		content string
+		err     error
+	}
+
+	numWorkers := 10
+	if len(filesToFetch) < numWorkers {
+		numWorkers = len(filesToFetch)
+	}
+
+	workChan := make(chan string, len(filesToFetch))
+	resultChan := make(chan fetchResult, len(filesToFetch))
+
+	for _, path := range filesToFetch {
+		workChan <- path
+	}
+	close(workChan)
+
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range workChan {
+				content, err := s.githubService.GetContents(ctx, userID, owner, repo, path, defaultBranch)
+				resultChan <- fetchResult{path: path, content: content, err: err}
+			}
+		}()
+	}
+
+	// Closer for results
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	var fileContents []parser.FileContent
+	for res := range resultChan {
+		if res.err != nil {
+			s.log.Warn("SyncTasks: failed to fetch file content",
+				zap.String("file", res.path),
+				zap.Error(res.err),
+			)
+			continue
+		}
+		fileContents = append(fileContents, parser.FileContent{
+			Path:    res.path,
+			Content: res.content,
+		})
+	}
+
+	// 5. Parse tasks.
+	parsedTasks := s.parser.ParseFiles(fileContents, 0)
+	s.log.Info("SyncTasks: scan complete",
+		zap.String("repo", owner+"/"+repo),
+		zap.Int("annotations_found", len(parsedTasks)),
+	)
+
+	// 6. Upsert newly discovered tasks.
+	now := time.Now().UTC()
+	scannedKeys := make(map[string]bool)
+	repoName := owner + "/" + repo
+
+	commits, err := s.githubService.ListCommits(ctx, userID, owner, repo, defaultBranch)
+	var commitSHA string
+	if err == nil && len(commits) > 0 {
+		commitSHA = commits[0].GetSHA()
+	} else {
+		commitSHA = "unknown"
+	}
+
+	for _, pt := range parsedTasks {
+		key := fmt.Sprintf("%s:%d", pt.FilePath, pt.LineNumber)
+		scannedKeys[key] = true
+
+		task := &domain.Task{
+			RepoID:     repoID,
+			RepoName:   repoName,
+			FilePath:   pt.FilePath,
+			LineNumber: pt.LineNumber,
+			Content:    pt.Content,
+			Type:       pt.Type,
+			Status:     domain.TaskStatusOpen,
+			CommitSHA:  commitSHA,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+
+		if err := s.taskRepo.UpsertTask(ctx, task); err != nil {
+			s.log.Error("SyncTasks: failed to upsert task",
+				zap.String("file", pt.FilePath),
+				zap.Int("line", pt.LineNumber),
+				zap.Error(err),
+			)
+		}
+	}
+
+	// 7. Cleanup/Delete old tasks that are no longer in the codebase.
+	existingTasks, err := s.taskRepo.FindByRepo(ctx, repoID)
+	if err != nil {
+		return fmt.Errorf("SyncTasks FindByRepo: %w", err)
+	}
+
+	for _, extTask := range existingTasks {
+		key := fmt.Sprintf("%s:%d", extTask.FilePath, extTask.LineNumber)
+		if !scannedKeys[key] {
+			if err := s.taskRepo.DeleteTask(ctx, extTask.ID); err != nil {
+				s.log.Error("SyncTasks: failed to delete stale task",
+					zap.String("id", extTask.ID.Hex()),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+
+	return nil
+}
+
+// isIgnoredPath determines if a file path belongs to dependency, build, or binary files.
+func (s *TaskService) isIgnoredPath(path string) bool {
+	lowerPath := strings.ToLower(path)
+	parts := strings.Split(lowerPath, "/")
+
+	// Check for ignored directory names in any part of the path
+	ignoredDirs := map[string]bool{
+		"node_modules": true,
+		"vendor":       true,
+		".git":         true,
+		"dist":         true,
+		"build":        true,
+		"target":       true,
+		".next":        true,
+		".nuxt":        true,
+		"venv":         true,
+		".venv":        true,
+		"__pycache__":  true,
+		".idea":        true,
+		".vscode":      true,
+		"out":          true,
+	}
+
+	for _, part := range parts {
+		if ignoredDirs[part] {
+			return true
+		}
+	}
+
+	// Check ignored file extensions
+	ignoredExtensions := []string{
+		".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".tar.gz",
+		".mp4", ".mp3", ".woff", ".woff2", ".eot", ".ttf", ".exe", ".dll",
+		".so", ".dylib", ".class", ".pyc", ".lock", "go.sum",
+	}
+
+	for _, ext := range ignoredExtensions {
+		if strings.HasSuffix(lowerPath, ext) {
+			return true
+		}
+	}
+
+	return false
 }
