@@ -316,7 +316,13 @@ func (s *GithubService) InjectTODO(ctx context.Context, userID primitive.ObjectI
 
 	// ── Step 5: Insert the TODO comment at the requested line ─────────────────
 	lines := strings.Split(existingContent, "\n")
-	todoLine := fmt.Sprintf("// TODO: %s", req.Description)
+
+	commentSymbol := getCommentPrefix(req.FilePath)
+	tagType := req.Type
+	if tagType == "" {
+		tagType = "TODO"
+	}
+	todoLine := fmt.Sprintf("%s %s: %s", commentSymbol, tagType, req.Description)
 
 	insertAt := req.LineNumber - 1 // convert to 0-based index
 	if insertAt < 0 {
@@ -560,5 +566,34 @@ func (s *GithubService) MergeBranch(ctx context.Context, userID primitive.Object
 	}
 
 	return resp, nil
+}
+
+// getCommentPrefix detects the appropriate comment prefix based on the file extension.
+func getCommentPrefix(filePath string) string {
+	parts := strings.Split(filePath, "/")
+	filename := strings.ToLower(parts[len(parts)-1])
+
+	ext := ""
+	extParts := strings.Split(filename, ".")
+	if len(extParts) > 1 {
+		ext = extParts[len(extParts)-1]
+	}
+
+	hashLangs := map[string]bool{
+		"py": true, "rb": true, "sh": true, "bash": true, "yaml": true,
+		"yml": true, "toml": true, "pl": true, "r": true, "dockerfile": true,
+		"makefile": true,
+	}
+	dashLangs := map[string]bool{
+		"sql": true, "lua": true, "hs": true,
+	}
+
+	if hashLangs[ext] || filename == "dockerfile" || filename == "makefile" {
+		return "#"
+	}
+	if dashLangs[ext] {
+		return "--"
+	}
+	return "//"
 }
 

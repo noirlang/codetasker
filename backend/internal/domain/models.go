@@ -121,6 +121,9 @@ type InjectTaskRequest struct {
 
 	// Branch is the base branch to read from and create the PR against.
 	Branch string `json:"branch" validate:"required"`
+
+	// Type is the comment tag type, e.g. "TODO", "FIXME", "BUG", "HACK", "NOTE".
+	Type string `json:"type"`
 }
 
 // UpdateTaskRequest is the request body for PATCH /api/tasks/:id.

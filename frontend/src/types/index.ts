@@ -85,6 +85,7 @@ export interface InjectTaskRequest {
   line_number: number;
   description: string;
   branch: string;
+  type: string;
 }
 
 /* ── API Error ────────────────────────────────────────────── */

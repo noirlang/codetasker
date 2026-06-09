@@ -40,6 +40,7 @@ export default function TaskInjector({
   // ── Form state ────────────────────────────────────────────────────────────
   const [filePath,    setFilePath]    = useState('');
   const [lineNumber,  setLineNumber]  = useState('');
+  const [taskType,    setTaskType]    = useState('TODO');
   const [description, setDescription] = useState('');
   const [branch,      setBranch]      = useState('');
 
@@ -56,6 +57,7 @@ export default function TaskInjector({
     if (isOpen) {
       setFilePath(prefilledFile ?? '');
       setLineNumber(prefilledLine != null ? String(prefilledLine) : '');
+      setTaskType('TODO');
       setBranch(defaultBranch);
       setDescription('');
       setPrUrl(null);
@@ -102,6 +104,7 @@ export default function TaskInjector({
       line_number: lineNum,
       description: description.trim(),
       branch:      branch.trim(),
+      type:        taskType,
     };
 
     setIsSubmitting(true);
@@ -249,6 +252,26 @@ export default function TaskInjector({
                   onChange={(e) => setLineNumber(e.target.value)}
                   disabled={isSubmitting}
                 />
+              </div>
+
+              {/* Task Type */}
+              <div className="flex flex-col gap-1.5">
+                <label className="section-label" htmlFor="inj-type">
+                  Task Type
+                </label>
+                <select
+                  id="inj-type"
+                  className="input text-xs"
+                  value={taskType}
+                  onChange={(e) => setTaskType(e.target.value)}
+                  disabled={isSubmitting}
+                >
+                  <option value="TODO">TODO</option>
+                  <option value="FIXME">FIXME</option>
+                  <option value="BUG">BUG</option>
+                  <option value="HACK">HACK</option>
+                  <option value="NOTE">NOTE</option>
+                </select>
               </div>
 
               {/* Description */}
