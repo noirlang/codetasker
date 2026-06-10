@@ -409,7 +409,9 @@ export default function TaskBoard({
 
   // Fetch tasks when repoId changes
   useEffect(() => {
-    fetchTasks(repoId);
+    if (repoId > 0) {
+      fetchTasks(repoId);
+    }
   }, [repoId, fetchTasks]);
 
   // ── Drag handler ────────────────────────────────────────────────────────
