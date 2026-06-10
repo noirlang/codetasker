@@ -29,8 +29,10 @@ interface TaskBoardProps {
   repoId: number;
   repoOwner: string;
   repoName: string;
-  /** Called when user clicks "Inject TODO" — optionally passes a pre-filled line */
+  /** Called when user clicks \"Inject TODO\" — optionally passes a pre-filled line */
   onInjectClick: (lineNumber?: number) => void;
+  /** Called when user clicks a task card to jump to the code */
+  onTaskClick?: (filePath: string, lineNumber: number) => void;
   /** List of active pull requests for linking */
   pulls: PullRequest[];
   /** Handler to pair a task to a PR */
@@ -58,12 +60,14 @@ function TaskCard({
   task,
   index,
   onInjectClick,
+  onTaskClick,
   pulls,
   onLinkTaskToPR,
 }: {
   task: Task;
   index: number;
   onInjectClick: (lineNumber?: number) => void;
+  onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
 }) {
@@ -85,8 +89,8 @@ function TaskCard({
               ? 'border-[#3a3a3a] bg-[#242424]'
               : 'hover:border-[#3a3a3a]',
           ].join(' ')}
-          onClick={() => onInjectClick(task.line_number)}
-          title="Click to pre-fill injector with this line"
+          onClick={() => onTaskClick ? onTaskClick(task.file_path, task.line_number) : onInjectClick(task.line_number)}
+          title="Click to view code at this line"
         >
           {/* Top row: type badge + file path */}
           <div className="flex min-w-0 items-center justify-between gap-2">
@@ -180,6 +184,7 @@ function KanbanColumn({
   label,
   tasks,
   onInjectClick,
+  onTaskClick,
   pulls,
   onLinkTaskToPR,
 }: {
@@ -187,6 +192,7 @@ function KanbanColumn({
   label: string;
   tasks: Task[];
   onInjectClick: (lineNumber?: number) => void;
+  onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
 }) {
@@ -219,6 +225,7 @@ function KanbanColumn({
                 task={task}
                 index={i}
                 onInjectClick={onInjectClick}
+                onTaskClick={onTaskClick}
                 pulls={pulls}
                 onLinkTaskToPR={onLinkTaskToPR}
               />
@@ -243,11 +250,13 @@ function KanbanColumn({
 function TaskListItem({
   task,
   onInjectClick,
+  onTaskClick,
   pulls,
   onLinkTaskToPR,
 }: {
   task: Task;
   onInjectClick: (lineNumber?: number) => void;
+  onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
 }) {
@@ -257,7 +266,7 @@ function TaskListItem({
   return (
     <div
       className="card flex items-center justify-between gap-3 px-3 py-2.5 transition-colors duration-150 hover:border-[#3a3a3a] cursor-pointer"
-      onClick={() => onInjectClick(task.line_number)}
+      onClick={() => onTaskClick ? onTaskClick(task.file_path, task.line_number) : onInjectClick(task.line_number)}
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <Badge type={task.type} />
@@ -333,11 +342,13 @@ function TaskListItem({
 function ListView({
   tasks,
   onInjectClick,
+  onTaskClick,
   pulls,
   onLinkTaskToPR,
 }: {
   tasks: Task[];
   onInjectClick: (lineNumber?: number) => void;
+  onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
 }) {
@@ -376,6 +387,7 @@ function ListView({
               key={task.id}
               task={task}
               onInjectClick={onInjectClick}
+              onTaskClick={onTaskClick}
               pulls={pulls}
               onLinkTaskToPR={onLinkTaskToPR}
             />
@@ -399,6 +411,7 @@ export default function TaskBoard({
   repoOwner: _repoOwner,
   repoName: _repoName,
   onInjectClick,
+  onTaskClick,
   pulls,
   onLinkTaskToPR,
 }: TaskBoardProps) {
@@ -520,6 +533,7 @@ export default function TaskBoard({
                   label={col.label}
                   tasks={byStatus(col.id)}
                   onInjectClick={onInjectClick}
+                  onTaskClick={onTaskClick}
                   pulls={pulls}
                   onLinkTaskToPR={onLinkTaskToPR}
                 />
@@ -530,6 +544,7 @@ export default function TaskBoard({
           <ListView
             tasks={tasks}
             onInjectClick={onInjectClick}
+            onTaskClick={onTaskClick}
             pulls={pulls}
             onLinkTaskToPR={onLinkTaskToPR}
           />

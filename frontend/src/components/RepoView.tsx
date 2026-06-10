@@ -249,6 +249,8 @@ export default function RepoView() {
     }
   }, [owner, repoName, repoId, isSyncing, syncRepoTasks]);
 
+  const [pendingScrollLine, setPendingScrollLine] = useState<number | null>(null);
+
   // Resolve repository ID from the user's repository list
   useEffect(() => {
     if (!owner || !repoName) return;
@@ -312,6 +314,11 @@ export default function RepoView() {
       setFileLoading(false);
     }
   }, [owner, repoName, currentBranch]);
+
+  const handleTaskClick = useCallback((filePath: string, lineNumber: number) => {
+    setPendingScrollLine(lineNumber);
+    handleFileSelect(filePath);
+  }, [handleFileSelect]);
 
   // Fetch pull requests
   const fetchPulls = useCallback(async () => {
@@ -507,6 +514,8 @@ export default function RepoView() {
               onSave={handleSaveFile}
               isSaving={isSaving}
               defaultBranch={currentBranch}
+              scrollToLine={pendingScrollLine}
+              onScrollToLineComplete={() => setPendingScrollLine(null)}
             />
           )}
         </main>
@@ -544,11 +553,12 @@ export default function RepoView() {
 
           <div className="flex-1 overflow-hidden flex flex-col">
             {rightTab === 'tasks' ? (
-              <TaskBoard
+               <TaskBoard
                 repoId={repoId}
                 repoOwner={owner}
                 repoName={repoName}
                 onInjectClick={handleInjectClick}
+                onTaskClick={handleTaskClick}
                 pulls={pulls}
                 onLinkTaskToPR={linkTaskToPR}
               />

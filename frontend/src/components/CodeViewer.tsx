@@ -40,6 +40,10 @@ interface CodeViewerProps {
   isSaving: boolean;
   /** Current active branch */
   defaultBranch: string;
+  /** Line number to scroll to on load */
+  scrollToLine?: number | null;
+  /** Callback to clear scroll line in parent */
+  onScrollToLineComplete?: () => void;
 }
 
 // ── Language inference ───────────────────────────────────────────────────────
@@ -122,6 +126,8 @@ export default function CodeViewer({
   onSave,
   isSaving,
   defaultBranch,
+  scrollToLine,
+  onScrollToLineComplete,
 }: CodeViewerProps) {
   // Keep a ref to the Monaco editor instance for decorations + event listeners
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
@@ -154,6 +160,24 @@ export default function CodeViewer({
     setCoAuthorsInput('');
     setError(null);
   }, [filePath, content, defaultBranch]);
+
+  // Scroll to requested line on load
+  useEffect(() => {
+    if (editorRef.current && scrollToLine != null && scrollToLine > 0) {
+      const timer = setTimeout(() => {
+        if (editorRef.current) {
+          editorRef.current.revealLineInCenter(scrollToLine);
+          editorRef.current.setPosition({ lineNumber: scrollToLine, column: 1 });
+          editorRef.current.focus();
+          if (onScrollToLineComplete) {
+            onScrollToLineComplete();
+          }
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    return;
+  }, [scrollToLine, onScrollToLineComplete]);
 
   // ── Editor mount handler ──────────────────────────────────────────────────
 
