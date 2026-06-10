@@ -177,6 +177,48 @@ func (s *GithubService) ListRepos(ctx context.Context, userID primitive.ObjectID
 	return repos, nil
 }
 
+// ListOrgs lists the organizations the authenticated user belongs to.
+func (s *GithubService) ListOrgs(ctx context.Context, userID primitive.ObjectID) ([]*github.Organization, error) {
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("ListOrgs: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	orgs, _, err := client.Organizations.List(ctx, "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("ListOrgs GitHub API: %w", err)
+	}
+
+	return orgs, nil
+}
+
+// ListOrgRepos lists the repositories of a specific organization.
+func (s *GithubService) ListOrgRepos(ctx context.Context, userID primitive.ObjectID, org string) ([]*github.Repository, error) {
+	if err := validateName(org, "org"); err != nil {
+		return nil, err
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("ListOrgRepos: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	opts := &github.RepositoryListByOrgOptions{
+		Type: "all",
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+	repos, _, err := client.Repositories.ListByOrg(ctx, org, opts)
+	if err != nil {
+		return nil, fmt.Errorf("ListOrgRepos GitHub API (%s): %w", org, err)
+	}
+
+	return repos, nil
+}
+
 // GetTree fetches the full recursive file tree for a repository branch.
 // The tree is used by the frontend to let users browse files before injecting
 // a TODO comment at a specific path and line.

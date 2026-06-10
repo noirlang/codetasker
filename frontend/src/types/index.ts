@@ -31,6 +31,11 @@ export interface Repo {
   topics?: string[];
 }
 
+export interface Organization {
+  login: string;
+  avatar_url: string;
+}
+
 /* ── Tasks ────────────────────────────────────────────────── */
 
 /** Task status — maps to Kanban column */

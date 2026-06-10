@@ -20,6 +20,7 @@ import type {
   RepoRole,
   Commit,
   PullRequest,
+  Organization,
 } from '../types';
 
 // ── Axios instance ─────────────────────────────────────────────────────────
@@ -274,6 +275,24 @@ export const reposApi = {
    */
   syncTasks: async (owner: string, repo: string): Promise<void> => {
     await client.post(`/repos/${owner}/${repo}/sync`);
+  },
+
+  /**
+   * List organizations for the authenticated user.
+   * GET /api/orgs
+   */
+  listOrgs: async (): Promise<Organization[]> => {
+    const { data } = await client.get<{ orgs: Organization[] }>('/orgs');
+    return data.orgs;
+  },
+
+  /**
+   * List repositories for a specific organization.
+   * GET /api/orgs/:org/repos
+   */
+  listOrgRepos: async (org: string): Promise<Repo[]> => {
+    const { data } = await client.get<{ repos: Repo[] }>(`/orgs/${org}/repos`);
+    return data.repos;
   },
 };
 

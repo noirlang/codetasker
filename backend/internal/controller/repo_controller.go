@@ -48,6 +48,8 @@ func NewRepoController(
 // RegisterRoutes mounts all repo routes onto the provided Fiber router group.
 func (rc *RepoController) RegisterRoutes(group fiber.Router) {
 	group.Get("/repos", rc.ListRepos)
+	group.Get("/orgs", rc.ListOrgs)
+	group.Get("/orgs/:org/repos", rc.ListOrgRepos)
 	group.Get("/repos/:owner/:repo/tree", rc.GetTree)
 	group.Get("/repos/:owner/:repo/contents", rc.GetContents)
 	group.Put("/repos/:owner/:repo/contents", rc.UpdateContents)
@@ -1080,5 +1082,140 @@ func (rc *RepoController) SyncRepoTasks(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "Repository tasks synced successfully",
+	})
+}
+
+// ListOrgs returns the organizations the authenticated user belongs to.
+// Route: GET /api/orgs
+func (rc *RepoController) ListOrgs(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	orgs, err := rc.githubService.ListOrgs(c.Context(), userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "list_orgs_failed",
+			"message": err.Error(),
+		})
+	}
+
+	type orgResponse struct {
+		Login     string `json:"login"`
+		AvatarURL string `json:"avatar_url"`
+	}
+
+	response := make([]orgResponse, 0, len(orgs))
+	for _, o := range orgs {
+		response = append(response, orgResponse{
+			Login:     o.GetLogin(),
+			AvatarURL: o.GetAvatarURL(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"orgs":  response,
+		"count": len(response),
+	})
+}
+
+// ListOrgRepos returns the repositories of a specific organization.
+// Route: GET /api/orgs/:org/repos
+func (rc *RepoController) ListOrgRepos(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	org := c.Params("org")
+	if org == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "missing_parameter",
+			"message": "parameter 'org' is required",
+		})
+	}
+
+	repos, err := rc.githubService.ListOrgRepos(c.Context(), userID, org)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "list_org_repos_failed",
+			"message": err.Error(),
+		})
+	}
+
+	// Fetch synced repositories to determine active sync statuses
+	syncedRepos, err := rc.syncedRepoRepo.FindByUserID(c.Context(), userID)
+	if err != nil {
+		syncedRepos = []domain.SyncedRepo{}
+	}
+
+	// Fetch collaborations where this user is added
+	collaborations, err := rc.collaboratorRepo.FindByUserID(c.Context(), userID)
+	if err != nil {
+		collaborations = []domain.Collaborator{}
+	}
+
+	syncedSet := make(map[int64]bool)
+	for _, sr := range syncedRepos {
+		syncedSet[sr.RepoID] = true
+	}
+	for _, col := range collaborations {
+		syncedSet[col.RepoID] = true
+	}
+
+	type repoResponse struct {
+		ID              int64    `json:"id"`
+		Name            string   `json:"name"`
+		FullName        string   `json:"full_name"`
+		Description     string   `json:"description"`
+		Private         bool     `json:"private"`
+		UpdatedAt       string   `json:"updated_at"`
+		Language        string   `json:"language"`
+		StargazersCount int      `json:"stargazers_count"`
+		HTMLURL         string   `json:"html_url"`
+		IsSynced        bool     `json:"is_synced"`
+		Topics          []string `json:"topics"`
+	}
+
+	response := make([]repoResponse, 0, len(repos))
+	for _, r := range repos {
+		updatedAt := ""
+		if r.UpdatedAt != nil {
+			updatedAt = r.UpdatedAt.Format("2006-01-02T15:04:05Z")
+		}
+
+		description := ""
+		if r.Description != nil {
+			description = *r.Description
+		}
+
+		language := ""
+		if r.Language != nil {
+			language = *r.Language
+		}
+
+		response = append(response, repoResponse{
+			ID:              r.GetID(),
+			Name:            r.GetName(),
+			FullName:        r.GetFullName(),
+			Description:     description,
+			Private:         r.GetPrivate(),
+			UpdatedAt:       updatedAt,
+			Language:        language,
+			StargazersCount: r.GetStargazersCount(),
+			HTMLURL:         r.GetHTMLURL(),
+			IsSynced:        syncedSet[r.GetID()],
+			Topics:          r.Topics,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"repos": response,
+		"count": len(response),
 	})
 }

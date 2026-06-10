@@ -58,7 +58,7 @@ func (s *AuthService) GetOAuthConfig() *oauth2.Config {
 		ClientID:     s.cfg.GithubClientID,
 		ClientSecret: s.cfg.GithubClientSecret,
 		RedirectURL:  s.cfg.GithubRedirectURL,
-		Scopes:       []string{"repo", "read:user", "user:email"},
+		Scopes:       []string{"repo", "read:user", "user:email", "read:org"},
 		Endpoint:     githuboauth.Endpoint,
 	}
 }

@@ -21,7 +21,7 @@ import {
 import ScrollReveal from 'scrollreveal';
 import { useAuthStore } from '../store/authStore';
 import { reposApi } from '../api/client';
-import type { Repo, ApiError } from '../types';
+import type { Repo, ApiError, Organization } from '../types';
 import Spinner from './ui/Spinner';
 
 // ── 3D Tilt Card Helper Component ──────────────────────────────────────────
@@ -224,6 +224,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   const [syncingRepoIds, setSyncingRepoIds] = useState<Record<number, boolean>>({});
+  const [orgs, setOrgs]       = useState<Organization[]>([]);
+  const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
 
   // Menu/Sidebar states
@@ -237,14 +239,37 @@ export default function Dashboard() {
     { label: 'Docs', icon: BookOpen },
   ];
 
-  // Fetch repositories on mount
+  // Fetch organizations on mount
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const data = await reposApi.list();
+        const data = await reposApi.listOrgs();
         if (!cancelled) {
-          setRepos(data);
+          setOrgs(data || []);
+        }
+      } catch (err) {
+        console.error('Failed to load organizations:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Fetch repositories on mount or when organization changes
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        let data: Repo[] = [];
+        if (selectedOrg) {
+          data = await reposApi.listOrgRepos(selectedOrg);
+        } else {
+          data = await reposApi.list();
+        }
+        if (!cancelled) {
+          setRepos(data || []);
           setTimeout(() => {
             if (!cancelled) {
               ScrollReveal().reveal('.reveal-card', {
@@ -271,7 +296,7 @@ export default function Dashboard() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [selectedOrg]);
 
   const handleView = (repo: Repo) => {
     const [owner] = repo.full_name.split('/');
@@ -485,7 +510,7 @@ export default function Dashboard() {
       {/* ── Main Content Area ─────────────────────────────────────────────── */}
       <main ref={mainRef} className="flex-1 h-screen overflow-y-auto bg-[#0a0a0a] px-6 md:px-12 py-8 flex flex-col">
         {/* Page heading */}
-        <div className="mb-8 flex items-baseline justify-between border-b border-[#2a2a2a]/40 pb-4">
+        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#2a2a2a]/40 pb-4">
           <div className="flex items-baseline gap-4">
             <h1 className="text-2xl font-bold text-white tracking-tight">Repositories</h1>
             {!loading && repos.length > 0 && (
@@ -493,6 +518,26 @@ export default function Dashboard() {
                 {activeIdx === 1 ? `${displayedRepos.length} synced` : `${repos.length} total`}
               </span>
             )}
+          </div>
+
+          {/* Organization Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#666666] font-mono">Source:</span>
+            <select
+              className="bg-[#111111] border border-[#2a2a2a] rounded text-xs text-white px-3 py-1.5 focus:outline-none focus:border-white transition-colors cursor-pointer"
+              value={selectedOrg || ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedOrg(val || null);
+              }}
+            >
+              <option value="">Personal Repositories</option>
+              {orgs.map((org) => (
+                <option key={org.login} value={org.login}>
+                  {org.login} (Org)
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
