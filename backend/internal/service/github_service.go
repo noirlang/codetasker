@@ -633,6 +633,27 @@ func (s *GithubService) GetRepository(ctx context.Context, userID primitive.Obje
 	return r, nil
 }
 
+// GetUserByUsername fetches public user information for a given GitHub username.
+func (s *GithubService) GetUserByUsername(ctx context.Context, userID primitive.ObjectID, username string) (*github.User, error) {
+	if !safeNamePattern.MatchString(username) {
+		return nil, fmt.Errorf("invalid username parameter (SSRF prevention)")
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("GetUserByUsername resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	ghUser, _, err := client.Users.Get(ctx, username)
+	if err != nil {
+		return nil, fmt.Errorf("GitHub Users.Get(%s) failed: %w", username, err)
+	}
+
+	return ghUser, nil
+}
+
+
 // getCommentPrefix detects the appropriate comment prefix based on the file extension.
 func getCommentPrefix(filePath string) string {
 	parts := strings.Split(filePath, "/")
