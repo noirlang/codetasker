@@ -28,7 +28,8 @@ import {
 } from 'lucide-react';
 import { reposApi } from '../api/client';
 import { useTaskStore } from '../store/taskStore';
-import type { FileTreeNode, ApiError, PullRequest } from '../types';
+import { useAuthStore } from '../store/authStore';
+import type { FileTreeNode, ApiError, PullRequest, Collaborator } from '../types';
 import CodeViewer from './CodeViewer';
 import TaskBoard from './TaskBoard';
 import TaskInjector from './TaskInjector';
@@ -215,9 +216,39 @@ export default function RepoView() {
   const [isSaving,        setIsSaving]        = useState(false);
 
   // Tabs tracking
-  const [leftTab,         setLeftTab]         = useState<'files' | 'commits'>('files');
+  const [leftTab,         setLeftTab]         = useState<'files' | 'commits' | 'access'>('files');
   const [rightTab,        setRightTab]        = useState<'tasks' | 'pulls'>('tasks');
   const [pulls,           setPulls]           = useState<PullRequest[]>([]);
+
+  const currentUser = useAuthStore((s) => s.user);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [collabLoading, setCollabLoading] = useState(false);
+
+  const fetchCollaborators = useCallback(async () => {
+    if (!owner || !repoName) return;
+    setCollabLoading(true);
+    try {
+      const list = await reposApi.listCollaborators(owner, repoName);
+      setCollaborators(list || []);
+    } catch (err) {
+      console.error('Failed to fetch collaborators:', err);
+    } finally {
+      setCollabLoading(false);
+    }
+  }, [owner, repoName]);
+
+  useEffect(() => {
+    if (owner && repoName) {
+      fetchCollaborators();
+    }
+  }, [owner, repoName, fetchCollaborators]);
+
+  const currentUserCollab = collaborators.find((c) => c.username === currentUser?.username);
+  const currentUserRole = currentUserCollab
+    ? currentUserCollab.role
+    : owner === currentUser?.username
+    ? 'owner'
+    : 'none';
 
   // Default branch — will be populated from a future repo-detail endpoint.
   // For now, 'main' is the safe default; the injector lets users override it.
@@ -463,6 +494,19 @@ export default function RepoView() {
               <GitCommit size={11} />
               Commits
             </button>
+            {currentUserRole !== 'none' && (
+              <button
+                onClick={() => setLeftTab('access')}
+                className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer ${
+                  leftTab === 'access'
+                    ? 'border-white text-white'
+                    : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+                }`}
+              >
+                <Users size={11} />
+                Access
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto py-1">
@@ -488,12 +532,59 @@ export default function RepoView() {
                   />
                 ))}
               </>
-            ) : (
+            ) : leftTab === 'commits' ? (
               <CommitHistoryPanel
                 owner={owner}
                 repoName={repoName}
                 currentBranch={currentBranch}
               />
+            ) : (
+              <div className="flex flex-col gap-3 p-3 animate__animated animate__fadeIn" style={{ animationDuration: '0.2s' }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-[#666666] uppercase tracking-wider">Access Controls</span>
+                  {(currentUserRole === 'owner' || currentUserRole === 'maintainer') && (
+                    <button
+                      onClick={() => setCollabOpen(true)}
+                      className="text-[9px] text-[#a0a0a0] hover:text-white border border-[#2a2a2a] px-1.5 py-0.5 rounded transition-all cursor-pointer font-mono"
+                    >
+                      Manage
+                    </button>
+                  )}
+                </div>
+                {collabLoading ? (
+                  <div className="flex justify-center py-6">
+                    <Spinner size={16} />
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {collaborators.map((collab) => {
+                      const isSelf = collab.username === currentUser?.username;
+                      return (
+                        <div
+                          key={collab.id}
+                          className="flex items-center justify-between p-2 rounded bg-[#161616] border border-[#222222]/60"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <img
+                              src={collab.avatar_url}
+                              alt={collab.username}
+                              className="h-6 w-6 rounded-full border border-[#2a2a2a] shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-semibold text-white truncate">
+                                {collab.username} {isSelf && <span className="text-[9px] text-[#666666]">(You)</span>}
+                              </p>
+                              <p className="text-[9px] text-[#666666] font-mono capitalize">
+                                {collab.role}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </aside>
@@ -591,6 +682,7 @@ export default function RepoView() {
         onClose={() => setCollabOpen(false)}
         repoOwner={owner}
         repoName={repoName}
+        onRefresh={fetchCollaborators}
       />
     </div>
   );

@@ -10,6 +10,7 @@ interface CollaboratorManagerProps {
   onClose: () => void;
   repoOwner: string;
   repoName: string;
+  onRefresh?: () => void;
 }
 
 export default function CollaboratorManager({
@@ -17,6 +18,7 @@ export default function CollaboratorManager({
   onClose,
   repoOwner,
   repoName,
+  onRefresh,
 }: CollaboratorManagerProps) {
   const currentUser = useAuthStore((s) => s.user);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -74,6 +76,7 @@ export default function CollaboratorManager({
       const newCollab = await reposApi.addCollaborator(repoOwner, repoName, username.trim(), role);
       setCollaborators((prev) => [...prev, newCollab]);
       setUsername('');
+      if (onRefresh) onRefresh();
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message ?? 'Failed to add collaborator.');
@@ -89,6 +92,7 @@ export default function CollaboratorManager({
       setCollaborators((prev) =>
         prev.map((c) => (c.id === collabId ? { ...c, role: newRole } : c))
       );
+      if (onRefresh) onRefresh();
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message ?? 'Failed to update role.');
@@ -101,6 +105,7 @@ export default function CollaboratorManager({
     try {
       await reposApi.removeCollaborator(repoOwner, repoName, collabId);
       setCollaborators((prev) => prev.filter((c) => c.id !== collabId));
+      if (onRefresh) onRefresh();
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message ?? 'Failed to remove collaborator.');
