@@ -125,7 +125,12 @@ func (r *UserRepository) FindByObjectID(ctx context.Context, id primitive.Object
 func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*domain.User, error) {
 	var user domain.User
 
-	err := r.col.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+	opts := options.FindOne().SetCollation(&options.Collation{
+		Locale:   "en",
+		Strength: 2,
+	})
+
+	err := r.col.FindOne(ctx, bson.M{"username": username}, opts).Decode(&user)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, nil
