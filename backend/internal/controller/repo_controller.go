@@ -4,6 +4,7 @@
 package controller
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/codetasker/backend/internal/config"
@@ -772,9 +773,10 @@ func (rc *RepoController) AddCollaborator(c *fiber.Ctx) error {
 		})
 	}
 	if invitee == nil {
+		fmt.Printf("[DEBUG] Collaborator invitee '%s' not found in database\n", body.Username)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "user_not_found",
-			"message": "The user must log in to CodeTasker with GitHub before they can be added as a collaborator",
+			"message": fmt.Sprintf("The user '%s' must log in to CodeTasker with GitHub before they can be added as a collaborator", body.Username),
 		})
 	}
 
