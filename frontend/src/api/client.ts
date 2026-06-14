@@ -18,7 +18,7 @@ import type {
   ApiError,
   Collaborator,
   RepoRole,
-  Commit,
+  CommitListResponse,
   PullRequest,
   Organization,
   ActionWorkflow,
@@ -228,13 +228,21 @@ export const reposApi = {
   listCommits: async (
     owner: string,
     repo: string,
-    branch?: string
-  ): Promise<Commit[]> => {
-    const { data } = await client.get<{ commits: Commit[] }>(
+    branch?: string,
+    page = 1,
+    perPage = 50
+  ): Promise<CommitListResponse> => {
+    const { data } = await client.get<CommitListResponse>(
       `/repos/${owner}/${repo}/commits`,
-      { params: branch ? { branch } : {} }
+      {
+        params: {
+          ...(branch ? { branch } : {}),
+          page,
+          per_page: perPage,
+        },
+      }
     );
-    return data.commits;
+    return data;
   },
 
   /**

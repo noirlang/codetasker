@@ -161,6 +161,14 @@ export interface Commit {
   check_error?: string;
 }
 
+export interface CommitListResponse {
+  commits: Commit[];
+  count: number;
+  page: number;
+  per_page: number;
+  next_page: number;
+}
+
 export interface PullRequest {
   id: number;
   number: number;

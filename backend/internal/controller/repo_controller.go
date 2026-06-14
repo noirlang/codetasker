@@ -5,6 +5,7 @@ package controller
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/codetasker/backend/internal/config"
@@ -410,14 +411,20 @@ func (rc *RepoController) GetCommits(c *fiber.Ctx) error {
 	owner := c.Params("owner")
 	repo := c.Params("repo")
 	branch := c.Query("branch") // optional, defaults to default branch / HEAD
+	page := parsePositiveQueryInt(c.Query("page"), 1)
+	perPage := parsePositiveQueryInt(c.Query("per_page"), 50)
+	if perPage > 100 {
+		perPage = 100
+	}
 
-	commits, err := rc.githubService.ListCommits(c.Context(), userID, owner, repo, branch)
+	result, err := rc.githubService.ListCommitsPage(c.Context(), userID, owner, repo, branch, page, perPage)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "get_commits_failed",
 			"message": err.Error(),
 		})
 	}
+	commits := result.Commits
 
 	type commitResponse struct {
 		SHA                string                          `json:"sha"`
@@ -536,9 +543,23 @@ func (rc *RepoController) GetCommits(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"commits": response,
-		"count":   len(response),
+		"commits":   response,
+		"count":     len(response),
+		"page":      page,
+		"per_page":  perPage,
+		"next_page": result.NextPage,
 	})
+}
+
+func parsePositiveQueryInt(value string, fallback int) int {
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 1 {
+		return fallback
+	}
+	return parsed
 }
 
 // GetActionWorkflows returns the GitHub Actions workflows configured for a repository.

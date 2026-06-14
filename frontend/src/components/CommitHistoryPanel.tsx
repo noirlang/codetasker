@@ -75,6 +75,8 @@ const filterOptions: { id: CommitFilter; label: string }[] = [
   { id: 'passed', label: 'Passed' },
 ];
 
+const COMMITS_PER_PAGE = 50;
+
 export default function CommitHistoryPanel({
   owner,
   repoName,
@@ -82,20 +84,42 @@ export default function CommitHistoryPanel({
 }: CommitHistoryPanelProps) {
   const [commits, setCommits] = useState<Commit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<CommitFilter>('all');
+  const [nextPage, setNextPage] = useState<number>(0);
 
-  const fetchCommits = async () => {
-    setIsLoading(true);
+  const fetchCommits = async (page = 1) => {
+    const loadingMore = page > 1;
+    if (loadingMore) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+      setNextPage(0);
+    }
     setError(null);
     try {
-      const data = await reposApi.listCommits(owner, repoName, currentBranch);
-      setCommits(data || []);
+      const data = await reposApi.listCommits(
+        owner,
+        repoName,
+        currentBranch,
+        page,
+        COMMITS_PER_PAGE
+      );
+      setCommits((current) => {
+        if (!loadingMore) return data.commits || [];
+
+        const seen = new Set(current.map((commit) => commit.sha));
+        const newCommits = (data.commits || []).filter((commit) => !seen.has(commit.sha));
+        return [...current, ...newCommits];
+      });
+      setNextPage(data.next_page || 0);
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message ?? 'Failed to load commit history.');
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
@@ -160,7 +184,7 @@ export default function CommitHistoryPanel({
         <GitCommit size={13} className="text-[#a0a0a0]" />
         <span className="text-xs font-semibold text-white">Commits ({currentBranch})</span>
         <span className="rounded border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#666666] ml-auto">
-          {visibleCommits.length}/{commits.length}
+          {visibleCommits.length}/{commits.length}{nextPage ? '+' : ''}
         </span>
       </div>
 
@@ -174,7 +198,7 @@ export default function CommitHistoryPanel({
           <div className="text-center py-6">
             <p className="text-xs text-[#666666] mb-2">{error}</p>
             <button
-              onClick={fetchCommits}
+              onClick={() => fetchCommits()}
               className="btn-secondary text-[10px] py-1 px-2"
             >
               Yeniden Dene
@@ -350,6 +374,16 @@ export default function CommitHistoryPanel({
                   </div>
                 );
               })
+            )}
+
+            {nextPage > 0 && (
+              <button
+                onClick={() => fetchCommits(nextPage)}
+                disabled={isLoadingMore}
+                className="btn-secondary mt-1 min-h-8 justify-center py-1.5 text-[10px] disabled:opacity-50"
+              >
+                {isLoadingMore ? <Spinner size={12} /> : 'Load more commits'}
+              </button>
             )}
           </>
         )}

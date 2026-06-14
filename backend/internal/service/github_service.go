@@ -67,6 +67,11 @@ type CommitStatusSummary struct {
 	TargetURL   string `json:"target_url"`
 }
 
+type CommitListResult struct {
+	Commits  []*github.RepositoryCommit
+	NextPage int
+}
+
 // NewGithubService constructs a GithubService with injected dependencies.
 func NewGithubService(cfg *config.Config, userRepo *repository.UserRepository, log *zap.Logger) *GithubService {
 	return &GithubService{
@@ -539,6 +544,16 @@ func (s *GithubService) UpdateFile(ctx context.Context, userID primitive.ObjectI
 
 // ListCommits lists the commits on a given branch.
 func (s *GithubService) ListCommits(ctx context.Context, userID primitive.ObjectID, owner, repo, branch string) ([]*github.RepositoryCommit, error) {
+	result, err := s.ListCommitsPage(ctx, userID, owner, repo, branch, 1, 25)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Commits, nil
+}
+
+// ListCommitsPage lists one paginated commit page on a given branch.
+func (s *GithubService) ListCommitsPage(ctx context.Context, userID primitive.ObjectID, owner, repo, branch string, page, perPage int) (*CommitListResult, error) {
 	if err := validateName(owner, "owner"); err != nil {
 		return nil, err
 	}
@@ -553,21 +568,40 @@ func (s *GithubService) ListCommits(ctx context.Context, userID primitive.Object
 
 	client := newGithubClient(ctx, token)
 
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 50
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+
 	opts := &github.CommitsListOptions{
 		ListOptions: github.ListOptions{
-			PerPage: 25,
+			Page:    page,
+			PerPage: perPage,
 		},
 	}
 	if branch != "" {
 		opts.SHA = branch
 	}
 
-	commits, _, err := client.Repositories.ListCommits(ctx, owner, repo, opts)
+	commits, resp, err := client.Repositories.ListCommits(ctx, owner, repo, opts)
 	if err != nil {
 		return nil, fmt.Errorf("ListCommits API call: %w", err)
 	}
 
-	return commits, nil
+	nextPage := 0
+	if resp != nil {
+		nextPage = resp.NextPage
+	}
+
+	return &CommitListResult{
+		Commits:  commits,
+		NextPage: nextPage,
+	}, nil
 }
 
 // ListActionWorkflows lists GitHub Actions workflow definitions for a repository.
