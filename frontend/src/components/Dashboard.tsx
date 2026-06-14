@@ -8,6 +8,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Activity,
+  CheckCircle2,
   Star,
   Lock,
   RefreshCw,
@@ -17,11 +19,16 @@ import {
   Settings,
   BookOpen,
   LogOut,
+  GitCommit,
+  GitPullRequest,
+  Github,
+  ShieldCheck,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import ScrollReveal from 'scrollreveal';
 import { useAuthStore } from '../store/authStore';
 import { reposApi } from '../api/client';
-import type { Repo, ApiError, Organization } from '../types';
+import type { Repo, ApiError, Organization, User } from '../types';
 import Spinner from './ui/Spinner';
 
 // ── 3D Tilt Card Helper Component ──────────────────────────────────────────
@@ -215,6 +222,149 @@ function RepoCard({
   );
 }
 
+function DashboardInfoCard({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded border border-[#2a2a2a] bg-[#111111] p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Icon size={15} className="text-[#a0a0a0]" />
+        <h2 className="text-sm font-semibold text-white">{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DocsContent() {
+  const docs = [
+    {
+      icon: RefreshCw,
+      title: 'Sync repositories',
+      text: 'Use Sync on a repository card to register the webhook and let CodeTasker scan TODO, FIXME, BUG, HACK, and NOTE annotations.',
+    },
+    {
+      icon: GitCommit,
+      title: 'Review commits',
+      text: 'Open a repository, switch to Commits, and use Load more commits when the branch has more history than the first page.',
+    },
+    {
+      icon: Activity,
+      title: 'Inspect Actions',
+      text: 'Use the Actions tab inside a repository to see workflows, recent runs, branch filters, status badges, and links back to GitHub.',
+    },
+    {
+      icon: GitPullRequest,
+      title: 'Inject and merge',
+      text: 'Create code annotations from the task board, review pull requests, and merge branches from the right-side PR panel.',
+    },
+  ];
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      {docs.map((item) => (
+        <DashboardInfoCard key={item.title} icon={item.icon} title={item.title}>
+          <p className="text-sm leading-6 text-[#a0a0a0]">{item.text}</p>
+        </DashboardInfoCard>
+      ))}
+
+      <section className="rounded border border-[#2a2a2a] bg-[#111111] p-5 lg:col-span-2">
+        <div className="mb-4 flex items-center gap-2">
+          <ShieldCheck size={15} className="text-[#a0a0a0]" />
+          <h2 className="text-sm font-semibold text-white">Sign-in help</h2>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {[
+            'Open CodeTasker from http://localhost:5173 during local testing.',
+            'Use the same browser session for CodeTasker and GitHub approval.',
+            'If state mismatch appears, close the stale callback tab and sign in again.',
+          ].map((step) => (
+            <div key={step} className="rounded border border-[#242424] bg-[#0d0d0d] p-3">
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-[#666666]">
+                <CheckCircle2 size={11} />
+                Check
+              </div>
+              <p className="text-xs leading-5 text-[#a0a0a0]">{step}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SettingsContent({
+  user,
+  repos,
+  orgs,
+}: {
+  user: User | null;
+  repos: Repo[];
+  orgs: Organization[];
+}) {
+  const syncedCount = repos.filter((repo) => repo.is_synced).length;
+  const privateCount = repos.filter((repo) => repo.private).length;
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <DashboardInfoCard icon={Github} title="GitHub account">
+        {user ? (
+          <div className="flex items-center gap-3">
+            <img
+              src={user.avatar_url}
+              alt={user.username}
+              className="h-10 w-10 rounded-full border border-[#3a3a3a]"
+            />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">{user.username}</p>
+              <p className="text-xs text-[#666666]">Signed in with GitHub</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-[#a0a0a0]">No authenticated user loaded.</p>
+        )}
+      </DashboardInfoCard>
+
+      <DashboardInfoCard icon={GitFork} title="Connected sources">
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            ['Repositories', repos.length],
+            ['Synced repos', syncedCount],
+            ['Organizations', orgs.length],
+            ['Private repos', privateCount],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded border border-[#242424] bg-[#0d0d0d] p-3">
+              <span className="text-xs text-[#888888]">{label}</span>
+              <p className="mt-1 font-mono text-lg font-semibold text-white">{value}</p>
+            </div>
+          ))}
+        </div>
+      </DashboardInfoCard>
+
+      <DashboardInfoCard icon={ShieldCheck} title="Security">
+        <div className="grid gap-2">
+          {[
+            'Your GitHub connection is protected.',
+            'Only repositories your GitHub account can access are listed.',
+            'Repository sync requests are checked before tasks update.',
+          ].map((item) => (
+            <div key={item} className="flex items-start gap-2 rounded border border-[#242424] bg-[#0d0d0d] px-3 py-2">
+              <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-emerald-300" />
+              <span className="text-xs leading-5 text-[#a0a0a0]">{item}</span>
+            </div>
+          ))}
+        </div>
+      </DashboardInfoCard>
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -238,6 +388,15 @@ export default function Dashboard() {
     { label: 'Settings', icon: Settings },
     { label: 'Docs', icon: BookOpen },
   ];
+  const pageTitle = menuItems[activeIdx]?.label ?? 'Dashboard';
+  const pageDescription =
+    activeIdx === 2
+      ? 'Account, connected sources, and repository sync security.'
+      : activeIdx === 3
+      ? 'Quick reference for syncing repositories, tasks, commits, pull requests, and Actions.'
+      : activeIdx === 1
+      ? 'Repositories with CodeTasker webhook sync enabled.'
+      : 'Repositories available through your GitHub account and organizations.';
 
   // Fetch organizations on mount
   useEffect(() => {
@@ -324,6 +483,14 @@ export default function Dashboard() {
   const displayedRepos = activeIdx === 1 ? repos.filter((r) => r.is_synced) : repos;
 
   const content = (() => {
+    if (activeIdx === 2) {
+      return <SettingsContent user={user} repos={repos} orgs={orgs} />;
+    }
+
+    if (activeIdx === 3) {
+      return <DocsContent />;
+    }
+
     if (loading) {
       return (
         <div className="flex flex-1 items-center justify-center min-h-[300px]">
@@ -425,13 +592,7 @@ export default function Dashboard() {
                 key={item.label}
                 onMouseEnter={() => setHoveredIdx(idx)}
                 onMouseLeave={() => setHoveredIdx(null)}
-                onClick={() => {
-                  if (idx === 0 || idx === 1) {
-                    setActiveIdx(idx);
-                  } else {
-                    alert(`${item.label} feature is coming soon!`);
-                  }
-                }}
+                onClick={() => setActiveIdx(idx)}
                 className={`relative flex items-center gap-3 px-4 py-2.5 rounded text-sm transition-all duration-200 text-left cursor-pointer h-[40px] ${
                   activeIdx === idx
                     ? 'text-white font-medium bg-white/[0.01]'
@@ -507,38 +668,61 @@ export default function Dashboard() {
         )}
       </header>
 
+      <nav className="flex md:hidden shrink-0 gap-1 overflow-x-auto border-b border-[#2a2a2a] bg-[#111111] px-3 py-2">
+        {menuItems.map((item, idx) => (
+          <button
+            key={item.label}
+            onClick={() => setActiveIdx(idx)}
+            className={[
+              'inline-flex h-8 shrink-0 items-center gap-1.5 rounded border px-3 text-[10px] font-semibold transition-colors',
+              activeIdx === idx
+                ? 'border-white bg-white text-black'
+                : 'border-[#2a2a2a] text-[#888888] hover:text-white',
+            ].join(' ')}
+          >
+            <item.icon size={11} />
+            {item.label}
+          </button>
+        ))}
+      </nav>
+
       {/* ── Main Content Area ─────────────────────────────────────────────── */}
-      <main ref={mainRef} className="flex-1 h-screen overflow-y-auto bg-[#0a0a0a] px-6 md:px-12 py-8 flex flex-col">
+      <main ref={mainRef} className="flex-1 min-h-0 overflow-y-auto bg-[#0a0a0a] px-6 md:px-12 py-8 flex flex-col">
         {/* Page heading */}
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#2a2a2a]/40 pb-4">
-          <div className="flex items-baseline gap-4">
-            <h1 className="text-2xl font-bold text-white tracking-tight">Repositories</h1>
-            {!loading && repos.length > 0 && (
-              <span className="text-xs font-mono text-[#666666] bg-[#141414] border border-[#222222] px-2 py-0.5 rounded">
-                {activeIdx === 1 ? `${displayedRepos.length} synced` : `${repos.length} total`}
-              </span>
-            )}
+          <div>
+            <div className="flex items-baseline gap-4">
+              <h1 className="text-2xl font-bold text-white tracking-tight">{pageTitle}</h1>
+              {!loading && repos.length > 0 && activeIdx < 2 && (
+                <span className="text-xs font-mono text-[#666666] bg-[#141414] border border-[#222222] px-2 py-0.5 rounded">
+                  {activeIdx === 1 ? `${displayedRepos.length} synced` : `${repos.length} total`}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-[#666666]">{pageDescription}</p>
           </div>
 
           {/* Organization Selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[#666666] font-mono">Source:</span>
-            <select
-              className="bg-[#111111] border border-[#2a2a2a] rounded text-xs text-white px-3 py-1.5 focus:outline-none focus:border-white transition-colors cursor-pointer"
-              value={selectedOrg || ''}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedOrg(val || null);
-              }}
-            >
-              <option value="">Personal Repositories</option>
-              {orgs.map((org) => (
-                <option key={org.login} value={org.login}>
-                  {org.login} (Org)
-                </option>
-              ))}
-            </select>
-          </div>
+          {activeIdx < 2 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#666666] font-mono">Source:</span>
+              <select
+                className="bg-[#111111] border border-[#2a2a2a] rounded text-xs text-white px-3 py-1.5 focus:outline-none focus:border-white transition-colors cursor-pointer"
+                value={selectedOrg || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedOrg(val || null);
+                }}
+              >
+                <option value="">Personal Repositories</option>
+                {orgs.map((org) => (
+                  <option key={org.login} value={org.login}>
+                    {org.login} (Org)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Repos Grid or State Content */}
