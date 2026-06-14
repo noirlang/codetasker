@@ -418,28 +418,71 @@ func (rc *RepoController) GetCommits(c *fiber.Ctx) error {
 	}
 
 	type commitResponse struct {
-		SHA       string `json:"sha"`
-		Message   string `json:"message"`
-		Author    string `json:"author"`
-		AvatarURL string `json:"avatar_url"`
-		Date      string `json:"date"`
+		SHA                string                          `json:"sha"`
+		Message            string                          `json:"message"`
+		Author             string                          `json:"author"`
+		AuthorEmail        string                          `json:"author_email"`
+		AvatarURL          string                          `json:"avatar_url"`
+		Committer          string                          `json:"committer"`
+		CommitterEmail     string                          `json:"committer_email"`
+		CommitterAvatarURL string                          `json:"committer_avatar_url"`
+		Date               string                          `json:"date"`
+		HTMLURL            string                          `json:"html_url"`
+		Verified           bool                            `json:"verified"`
+		VerificationReason string                          `json:"verification_reason"`
+		CheckState         string                          `json:"check_state"`
+		CheckTotal         int                             `json:"check_total"`
+		CheckRuns          []service.CommitCheckRunSummary `json:"check_runs"`
+		Statuses           []service.CommitStatusSummary   `json:"statuses"`
+		CheckError         string                          `json:"check_error,omitempty"`
 	}
+
+	shas := make([]string, 0, len(commits))
+	for _, commit := range commits {
+		if commit == nil {
+			continue
+		}
+		if sha := commit.GetSHA(); sha != "" {
+			shas = append(shas, sha)
+		}
+	}
+
+	healthBySHA, healthErr := rc.githubService.GetCommitHealthSummaries(c.Context(), userID, owner, repo, shas)
 
 	response := make([]commitResponse, 0, len(commits))
 	for _, commit := range commits {
+		if commit == nil {
+			continue
+		}
+
 		sha := commit.GetSHA()
 		msg := ""
 		author := ""
+		authorEmail := ""
 		avatar := ""
+		committer := ""
+		committerEmail := ""
+		committerAvatar := ""
 		date := ""
+		verified := false
+		verificationReason := ""
 
 		if commit.Commit != nil {
 			msg = commit.Commit.GetMessage()
 			if commit.Commit.Author != nil {
 				author = commit.Commit.Author.GetName()
+				authorEmail = commit.Commit.Author.GetEmail()
 				if commit.Commit.Author.Date != nil {
 					date = commit.Commit.Author.Date.Format(time.RFC3339)
 				}
+			}
+			if commit.Commit.Committer != nil {
+				committer = commit.Commit.Committer.GetName()
+				committerEmail = commit.Commit.Committer.GetEmail()
+			}
+			if verification := commit.Commit.GetVerification(); verification != nil {
+				verified = verification.GetVerified()
+				verificationReason = verification.GetReason()
 			}
 		}
 
@@ -449,13 +492,44 @@ func (rc *RepoController) GetCommits(c *fiber.Ctx) error {
 				author = commit.Author.GetLogin()
 			}
 		}
+		if commit.Committer != nil {
+			committerAvatar = commit.Committer.GetAvatarURL()
+			if committer == "" {
+				committer = commit.Committer.GetLogin()
+			}
+		}
+
+		health := service.CommitHealthSummary{
+			State:     "unknown",
+			CheckRuns: []service.CommitCheckRunSummary{},
+			Statuses:  []service.CommitStatusSummary{},
+		}
+		if healthErr != nil {
+			health.Error = healthErr.Error()
+		} else if healthBySHA != nil {
+			if summary, ok := healthBySHA[sha]; ok {
+				health = summary
+			}
+		}
 
 		response = append(response, commitResponse{
-			SHA:       sha,
-			Message:   msg,
-			Author:    author,
-			AvatarURL: avatar,
-			Date:      date,
+			SHA:                sha,
+			Message:            msg,
+			Author:             author,
+			AuthorEmail:        authorEmail,
+			AvatarURL:          avatar,
+			Committer:          committer,
+			CommitterEmail:     committerEmail,
+			CommitterAvatarURL: committerAvatar,
+			Date:               date,
+			HTMLURL:            commit.GetHTMLURL(),
+			Verified:           verified,
+			VerificationReason: verificationReason,
+			CheckState:         health.State,
+			CheckTotal:         health.Total,
+			CheckRuns:          health.CheckRuns,
+			Statuses:           health.Statuses,
+			CheckError:         health.Error,
 		})
 	}
 

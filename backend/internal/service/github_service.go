@@ -42,6 +42,31 @@ type GithubService struct {
 	log      *zap.Logger
 }
 
+// CommitHealthSummary is the normalized CI/status state for a single commit.
+type CommitHealthSummary struct {
+	State     string                  `json:"state"`
+	Total     int                     `json:"total"`
+	CheckRuns []CommitCheckRunSummary `json:"check_runs"`
+	Statuses  []CommitStatusSummary   `json:"statuses"`
+	Error     string                  `json:"error,omitempty"`
+}
+
+type CommitCheckRunSummary struct {
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	Conclusion  string `json:"conclusion"`
+	DetailsURL  string `json:"details_url"`
+	StartedAt   string `json:"started_at"`
+	CompletedAt string `json:"completed_at"`
+}
+
+type CommitStatusSummary struct {
+	Context     string `json:"context"`
+	State       string `json:"state"`
+	Description string `json:"description"`
+	TargetURL   string `json:"target_url"`
+}
+
 // NewGithubService constructs a GithubService with injected dependencies.
 func NewGithubService(cfg *config.Config, userRepo *repository.UserRepository, log *zap.Logger) *GithubService {
 	return &GithubService{
@@ -498,10 +523,10 @@ func (s *GithubService) UpdateFile(ctx context.Context, userID primitive.ObjectI
 	}
 
 	updateOpts := &github.RepositoryContentFileOptions{
-		Message:   github.String(commitMsg),
-		Content:   []byte(content),
-		SHA:       fileContent.SHA,
-		Branch:    github.String(branch),
+		Message: github.String(commitMsg),
+		Content: []byte(content),
+		SHA:     fileContent.SHA,
+		Branch:  github.String(branch),
 	}
 
 	resp, _, err := client.Repositories.UpdateFile(ctx, owner, repo, path, updateOpts)
@@ -530,7 +555,7 @@ func (s *GithubService) ListCommits(ctx context.Context, userID primitive.Object
 
 	opts := &github.CommitsListOptions{
 		ListOptions: github.ListOptions{
-			PerPage: 50,
+			PerPage: 25,
 		},
 	}
 	if branch != "" {
@@ -543,6 +568,176 @@ func (s *GithubService) ListCommits(ctx context.Context, userID primitive.Object
 	}
 
 	return commits, nil
+}
+
+// GetCommitHealthSummaries fetches GitHub Checks and legacy commit statuses for
+// each SHA. Per-commit API failures are captured in the summary instead of
+// failing the entire commit list, so the UI can still render the history.
+func (s *GithubService) GetCommitHealthSummaries(ctx context.Context, userID primitive.ObjectID, owner, repo string, shas []string) (map[string]CommitHealthSummary, error) {
+	if err := validateName(owner, "owner"); err != nil {
+		return nil, err
+	}
+	if err := validateName(repo, "repo"); err != nil {
+		return nil, err
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("GetCommitHealthSummaries resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	filter := "latest"
+	result := make(map[string]CommitHealthSummary, len(shas))
+
+	for _, sha := range shas {
+		if sha == "" {
+			continue
+		}
+
+		summary := CommitHealthSummary{
+			State:     "none",
+			CheckRuns: []CommitCheckRunSummary{},
+			Statuses:  []CommitStatusSummary{},
+		}
+
+		checkRuns, _, err := client.Checks.ListCheckRunsForRef(ctx, owner, repo, sha, &github.ListCheckRunsOptions{
+			Filter: &filter,
+			ListOptions: github.ListOptions{
+				PerPage: 10,
+			},
+		})
+		if err != nil {
+			summary.Error = appendCommitHealthError(summary.Error, "checks", err)
+		} else if checkRuns != nil {
+			for _, run := range checkRuns.CheckRuns {
+				if run == nil {
+					continue
+				}
+				summary.CheckRuns = append(summary.CheckRuns, CommitCheckRunSummary{
+					Name:        run.GetName(),
+					Status:      run.GetStatus(),
+					Conclusion:  run.GetConclusion(),
+					DetailsURL:  firstNonEmpty(run.GetDetailsURL(), run.GetHTMLURL()),
+					StartedAt:   formatGithubTimestamp(run.StartedAt),
+					CompletedAt: formatGithubTimestamp(run.CompletedAt),
+				})
+			}
+		}
+
+		combinedStatus, _, err := client.Repositories.GetCombinedStatus(ctx, owner, repo, sha, &github.ListOptions{
+			PerPage: 10,
+		})
+		if err != nil {
+			summary.Error = appendCommitHealthError(summary.Error, "statuses", err)
+		} else if combinedStatus != nil {
+			for _, status := range combinedStatus.Statuses {
+				if status == nil {
+					continue
+				}
+				summary.Statuses = append(summary.Statuses, CommitStatusSummary{
+					Context:     status.GetContext(),
+					State:       status.GetState(),
+					Description: status.GetDescription(),
+					TargetURL:   status.GetTargetURL(),
+				})
+			}
+		}
+
+		summary.Total = len(summary.CheckRuns) + len(summary.Statuses)
+		summary.State = summarizeCommitHealth(summary)
+		result[sha] = summary
+	}
+
+	return result, nil
+}
+
+func summarizeCommitHealth(summary CommitHealthSummary) string {
+	if summary.Total == 0 {
+		if summary.Error != "" {
+			return "unknown"
+		}
+		return "none"
+	}
+
+	hasPending := false
+	hasFailure := false
+	hasError := false
+
+	for _, run := range summary.CheckRuns {
+		if run.Status != "completed" {
+			hasPending = true
+			continue
+		}
+
+		switch run.Conclusion {
+		case "success", "neutral", "skipped":
+		case "timed_out", "cancelled", "action_required", "failure":
+			hasFailure = true
+		default:
+			if run.Conclusion == "" {
+				hasPending = true
+			} else {
+				hasFailure = true
+			}
+		}
+	}
+
+	for _, status := range summary.Statuses {
+		switch status.State {
+		case "success":
+		case "pending":
+			hasPending = true
+		case "error":
+			hasError = true
+		case "failure":
+			hasFailure = true
+		default:
+			if status.State == "" {
+				hasPending = true
+			} else {
+				hasFailure = true
+			}
+		}
+	}
+
+	if hasError {
+		return "error"
+	}
+	if hasFailure {
+		return "failure"
+	}
+	if hasPending {
+		return "pending"
+	}
+	return "success"
+}
+
+func appendCommitHealthError(current, source string, err error) string {
+	if err == nil {
+		return current
+	}
+	message := source + ": " + err.Error()
+	if current == "" {
+		return message
+	}
+	return current + "; " + message
+}
+
+func formatGithubTimestamp(timestamp *github.Timestamp) string {
+	if timestamp == nil || timestamp.IsZero() {
+		return ""
+	}
+	return timestamp.Format(time.RFC3339)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // ListPullRequests lists the pull requests in the repository.
@@ -653,7 +848,6 @@ func (s *GithubService) GetUserByUsername(ctx context.Context, userID primitive.
 	return ghUser, nil
 }
 
-
 // getCommentPrefix detects the appropriate comment prefix based on the file extension.
 func getCommentPrefix(filePath string) string {
 	parts := strings.Split(filePath, "/")
@@ -682,5 +876,3 @@ func getCommentPrefix(filePath string) string {
 	}
 	return "//"
 }
-
-

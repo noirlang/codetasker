@@ -117,12 +117,48 @@ export interface Collaborator {
 
 /* ── Commits & Pull Requests ──────────────────────────────── */
 
+export type CommitCheckState =
+  | 'success'
+  | 'failure'
+  | 'error'
+  | 'pending'
+  | 'none'
+  | 'unknown';
+
+export interface CommitCheckRun {
+  name: string;
+  status: string;
+  conclusion: string;
+  details_url: string;
+  started_at: string;
+  completed_at: string;
+}
+
+export interface CommitStatus {
+  context: string;
+  state: string;
+  description: string;
+  target_url: string;
+}
+
 export interface Commit {
   sha: string;
   message: string;
   author: string;
+  author_email: string;
   avatar_url: string;
+  committer: string;
+  committer_email: string;
+  committer_avatar_url: string;
   date: string;
+  html_url: string;
+  verified: boolean;
+  verification_reason: string;
+  check_state: CommitCheckState;
+  check_total: number;
+  check_runs: CommitCheckRun[];
+  statuses: CommitStatus[];
+  check_error?: string;
 }
 
 export interface PullRequest {
@@ -137,3 +173,4 @@ export interface PullRequest {
   avatar_url: string;
   created_at: string;
 }
+
