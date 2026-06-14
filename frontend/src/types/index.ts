@@ -174,3 +174,35 @@ export interface PullRequest {
   created_at: string;
 }
 
+/* ── GitHub Actions ──────────────────────────────────────── */
+
+export interface ActionWorkflow {
+  id: number;
+  name: string;
+  path: string;
+  state: string;
+  html_url: string;
+  badge_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActionWorkflowRun {
+  id: number;
+  name: string;
+  display_title: string;
+  status: string;
+  conclusion: string;
+  workflow_id: number;
+  run_number: number;
+  run_attempt: number;
+  event: string;
+  head_branch: string;
+  head_sha: string;
+  html_url: string;
+  actor: string;
+  actor_avatar_url: string;
+  created_at: string;
+  updated_at: string;
+  run_started_at: string;
+}

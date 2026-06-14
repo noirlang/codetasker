@@ -570,6 +570,92 @@ func (s *GithubService) ListCommits(ctx context.Context, userID primitive.Object
 	return commits, nil
 }
 
+// ListActionWorkflows lists GitHub Actions workflow definitions for a repository.
+func (s *GithubService) ListActionWorkflows(ctx context.Context, userID primitive.ObjectID, owner, repo string) (*github.Workflows, error) {
+	if err := validateName(owner, "owner"); err != nil {
+		return nil, err
+	}
+	if err := validateName(repo, "repo"); err != nil {
+		return nil, err
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("ListActionWorkflows resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	workflows, _, err := client.Actions.ListWorkflows(ctx, owner, repo, &github.ListOptions{
+		PerPage: 100,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ListActionWorkflows API call: %w", err)
+	}
+
+	return workflows, nil
+}
+
+// ListActionRuns lists recent GitHub Actions workflow runs for a repository.
+func (s *GithubService) ListActionRuns(ctx context.Context, userID primitive.ObjectID, owner, repo, branch, status string) (*github.WorkflowRuns, error) {
+	if err := validateName(owner, "owner"); err != nil {
+		return nil, err
+	}
+	if err := validateName(repo, "repo"); err != nil {
+		return nil, err
+	}
+
+	status = strings.TrimSpace(status)
+	if status == "all" {
+		status = ""
+	}
+	if !isAllowedWorkflowRunStatus(status) {
+		return nil, fmt.Errorf("invalid workflow run status %q", status)
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("ListActionRuns resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	runs, _, err := client.Actions.ListRepositoryWorkflowRuns(ctx, owner, repo, &github.ListWorkflowRunsOptions{
+		Branch: strings.TrimSpace(branch),
+		Status: status,
+		ListOptions: github.ListOptions{
+			PerPage: 25,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ListActionRuns API call: %w", err)
+	}
+
+	return runs, nil
+}
+
+func isAllowedWorkflowRunStatus(status string) bool {
+	if status == "" {
+		return true
+	}
+
+	allowed := map[string]bool{
+		"queued":          true,
+		"in_progress":     true,
+		"completed":       true,
+		"success":         true,
+		"failure":         true,
+		"neutral":         true,
+		"cancelled":       true,
+		"skipped":         true,
+		"timed_out":       true,
+		"action_required": true,
+		"requested":       true,
+		"waiting":         true,
+		"pending":         true,
+		"stale":           true,
+	}
+	return allowed[status]
+}
+
 // GetCommitHealthSummaries fetches GitHub Checks and legacy commit statuses for
 // each SHA. Per-commit API failures are captured in the summary instead of
 // failing the entire commit list, so the UI can still render the history.

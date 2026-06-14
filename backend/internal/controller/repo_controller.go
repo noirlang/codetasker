@@ -57,6 +57,8 @@ func (rc *RepoController) RegisterRoutes(group fiber.Router) {
 	group.Post("/repos/:owner/:repo/webhook", rc.CreateWebhook)
 	group.Post("/repos/:owner/:repo/sync", rc.SyncRepoTasks)
 	group.Get("/repos/:owner/:repo/commits", rc.GetCommits)
+	group.Get("/repos/:owner/:repo/actions/workflows", rc.GetActionWorkflows)
+	group.Get("/repos/:owner/:repo/actions/runs", rc.GetActionRuns)
 	group.Get("/repos/:owner/:repo/pulls", rc.GetPulls)
 	group.Post("/repos/:owner/:repo/merge", rc.MergeBranch)
 
@@ -536,6 +538,171 @@ func (rc *RepoController) GetCommits(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"commits": response,
 		"count":   len(response),
+	})
+}
+
+// GetActionWorkflows returns the GitHub Actions workflows configured for a repository.
+// Route: GET /api/repos/:owner/:repo/actions/workflows
+func (rc *RepoController) GetActionWorkflows(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+
+	workflows, err := rc.githubService.ListActionWorkflows(c.Context(), userID, owner, repo)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "get_action_workflows_failed",
+			"message": err.Error(),
+		})
+	}
+
+	type workflowResponse struct {
+		ID        int64  `json:"id"`
+		Name      string `json:"name"`
+		Path      string `json:"path"`
+		State     string `json:"state"`
+		HTMLURL   string `json:"html_url"`
+		BadgeURL  string `json:"badge_url"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+	}
+
+	response := make([]workflowResponse, 0, len(workflows.Workflows))
+	for _, workflow := range workflows.Workflows {
+		if workflow == nil {
+			continue
+		}
+
+		createdAt := ""
+		if workflow.CreatedAt != nil {
+			createdAt = workflow.CreatedAt.Format(time.RFC3339)
+		}
+
+		updatedAt := ""
+		if workflow.UpdatedAt != nil {
+			updatedAt = workflow.UpdatedAt.Format(time.RFC3339)
+		}
+
+		response = append(response, workflowResponse{
+			ID:        workflow.GetID(),
+			Name:      workflow.GetName(),
+			Path:      workflow.GetPath(),
+			State:     workflow.GetState(),
+			HTMLURL:   workflow.GetHTMLURL(),
+			BadgeURL:  workflow.GetBadgeURL(),
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"workflows": response,
+		"count":     len(response),
+	})
+}
+
+// GetActionRuns returns recent GitHub Actions workflow runs for a repository.
+// Route: GET /api/repos/:owner/:repo/actions/runs
+func (rc *RepoController) GetActionRuns(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+	branch := c.Query("branch")
+	status := c.Query("status")
+
+	runs, err := rc.githubService.ListActionRuns(c.Context(), userID, owner, repo, branch, status)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "get_action_runs_failed",
+			"message": err.Error(),
+		})
+	}
+
+	type actionRunResponse struct {
+		ID             int64  `json:"id"`
+		Name           string `json:"name"`
+		DisplayTitle   string `json:"display_title"`
+		Status         string `json:"status"`
+		Conclusion     string `json:"conclusion"`
+		WorkflowID     int64  `json:"workflow_id"`
+		RunNumber      int    `json:"run_number"`
+		RunAttempt     int    `json:"run_attempt"`
+		Event          string `json:"event"`
+		HeadBranch     string `json:"head_branch"`
+		HeadSHA        string `json:"head_sha"`
+		HTMLURL        string `json:"html_url"`
+		Actor          string `json:"actor"`
+		ActorAvatarURL string `json:"actor_avatar_url"`
+		CreatedAt      string `json:"created_at"`
+		UpdatedAt      string `json:"updated_at"`
+		RunStartedAt   string `json:"run_started_at"`
+	}
+
+	response := make([]actionRunResponse, 0, len(runs.WorkflowRuns))
+	for _, run := range runs.WorkflowRuns {
+		if run == nil {
+			continue
+		}
+
+		actor := ""
+		actorAvatar := ""
+		if run.Actor != nil {
+			actor = run.Actor.GetLogin()
+			actorAvatar = run.Actor.GetAvatarURL()
+		}
+
+		createdAt := ""
+		if run.CreatedAt != nil {
+			createdAt = run.CreatedAt.Format(time.RFC3339)
+		}
+
+		updatedAt := ""
+		if run.UpdatedAt != nil {
+			updatedAt = run.UpdatedAt.Format(time.RFC3339)
+		}
+
+		runStartedAt := ""
+		if run.RunStartedAt != nil {
+			runStartedAt = run.RunStartedAt.Format(time.RFC3339)
+		}
+
+		response = append(response, actionRunResponse{
+			ID:             run.GetID(),
+			Name:           run.GetName(),
+			DisplayTitle:   run.GetDisplayTitle(),
+			Status:         run.GetStatus(),
+			Conclusion:     run.GetConclusion(),
+			WorkflowID:     run.GetWorkflowID(),
+			RunNumber:      run.GetRunNumber(),
+			RunAttempt:     run.GetRunAttempt(),
+			Event:          run.GetEvent(),
+			HeadBranch:     run.GetHeadBranch(),
+			HeadSHA:        run.GetHeadSHA(),
+			HTMLURL:        run.GetHTMLURL(),
+			Actor:          actor,
+			ActorAvatarURL: actorAvatar,
+			CreatedAt:      createdAt,
+			UpdatedAt:      updatedAt,
+			RunStartedAt:   runStartedAt,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"runs":        response,
+		"count":       len(response),
+		"total_count": runs.GetTotalCount(),
 	})
 }
 

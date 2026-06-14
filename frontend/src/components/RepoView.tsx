@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
+  Activity,
   ChevronRight,
   ChevronDown,
   FileText,
@@ -36,6 +37,7 @@ import TaskInjector from './TaskInjector';
 import CollaboratorManager from './CollaboratorManager';
 import CommitHistoryPanel from './CommitHistoryPanel';
 import PullRequestPanel from './PullRequestPanel';
+import ActionsPanel from './ActionsPanel';
 import Spinner from './ui/Spinner';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -217,7 +219,7 @@ export default function RepoView() {
 
   // Tabs tracking
   const [leftTab,         setLeftTab]         = useState<'files' | 'commits' | 'access'>('files');
-  const [rightTab,        setRightTab]        = useState<'tasks' | 'pulls'>('tasks');
+  const [rightTab,        setRightTab]        = useState<'tasks' | 'pulls' | 'actions'>('tasks');
   const [pulls,           setPulls]           = useState<PullRequest[]>([]);
 
   const currentUser = useAuthStore((s) => s.user);
@@ -640,6 +642,17 @@ export default function RepoView() {
               <GitPullRequest size={11} />
               Pull Requests
             </button>
+            <button
+              onClick={() => setRightTab('actions')}
+              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer ${
+                rightTab === 'actions'
+                  ? 'border-white text-white'
+                  : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+              }`}
+            >
+              <Activity size={11} />
+              Actions
+            </button>
           </div>
 
           <div className="flex-1 overflow-hidden flex flex-col">
@@ -653,12 +666,18 @@ export default function RepoView() {
                 pulls={pulls}
                 onLinkTaskToPR={linkTaskToPR}
               />
-            ) : (
+            ) : rightTab === 'pulls' ? (
               <PullRequestPanel
                 owner={owner}
                 repoName={repoName}
                 currentBranch={currentBranch}
                 onMergeComplete={handleMergeComplete}
+              />
+            ) : (
+              <ActionsPanel
+                owner={owner}
+                repoName={repoName}
+                currentBranch={currentBranch}
               />
             )}
           </div>
@@ -687,4 +706,3 @@ export default function RepoView() {
     </div>
   );
 }
-

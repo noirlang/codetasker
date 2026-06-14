@@ -21,6 +21,8 @@ import type {
   Commit,
   PullRequest,
   Organization,
+  ActionWorkflow,
+  ActionWorkflowRun,
 } from '../types';
 
 // ── Axios instance ─────────────────────────────────────────────────────────
@@ -233,6 +235,36 @@ export const reposApi = {
       { params: branch ? { branch } : {} }
     );
     return data.commits;
+  },
+
+  /**
+   * List GitHub Actions workflows for a repository.
+   * GET /api/repos/:owner/:repo/actions/workflows
+   */
+  listActionWorkflows: async (
+    owner: string,
+    repo: string
+  ): Promise<ActionWorkflow[]> => {
+    const { data } = await client.get<{ workflows: ActionWorkflow[] }>(
+      `/repos/${owner}/${repo}/actions/workflows`
+    );
+    return data.workflows;
+  },
+
+  /**
+   * List recent GitHub Actions workflow runs for a repository.
+   * GET /api/repos/:owner/:repo/actions/runs?branch=<branch>&status=<status>
+   */
+  listActionRuns: async (
+    owner: string,
+    repo: string,
+    params?: { branch?: string; status?: string }
+  ): Promise<ActionWorkflowRun[]> => {
+    const { data } = await client.get<{ runs: ActionWorkflowRun[] }>(
+      `/repos/${owner}/${repo}/actions/runs`,
+      { params }
+    );
+    return data.runs;
   },
 
   /**
