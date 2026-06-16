@@ -130,12 +130,12 @@ export default function Login() {
         </div>
         <div className="mt-4 flex gap-4 md:mt-0 animate__animated animate__fadeIn">
           <a
-            href="https://github.com"
+            href="https://github.com/noirlang/codetasker"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white"
           >
-            <Github size={14} /> Documentation
+            <Github size={14} /> GitHub
           </a>
         </div>
       </header>
@@ -440,9 +440,19 @@ func (s *TaskService) ProcessWebhook(...) {
         </div>
       </section>
 
-      {/* ── Footer ──────────────────────────────────────────────────────────── */}
       <footer className="relative z-10 border-t border-[#2a2a2a] py-8 text-center text-xs text-[#666666]">
-        <p>© 2026 CodeTasker. Sync your TODOs. Ship faster.</p>
+        <p>
+          © 2026{' '}
+          <a
+            href="https://noirlang.tr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-white transition-colors"
+          >
+            noirLang
+          </a>
+          . Sync your TODOs. Ship faster.
+        </p>
       </footer>
     </div>
   );
