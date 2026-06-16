@@ -5,7 +5,7 @@
  * grid with a sleek left sidebar. Each card links to the RepoView.
  */
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -471,48 +471,46 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch repositories on mount or when organization changes
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        let data: Repo[] = [];
-        if (selectedOrg) {
-          data = await reposApi.listOrgRepos(selectedOrg);
-        } else {
-          data = await reposApi.list();
-        }
-        if (!cancelled) {
-          setRepos(data || []);
-          setTimeout(() => {
-            if (!cancelled) {
-              ScrollReveal().reveal('.reveal-card', {
-                container: mainRef.current || undefined,
-                origin: 'bottom',
-                distance: '20px',
-                duration: 600,
-                delay: 50,
-                interval: 60,
-                opacity: 0,
-                scale: 0.98,
-                reset: false,
-              });
-            }
-          }, 50);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          const apiErr = err as ApiError;
-          setError(apiErr.message ?? 'Failed to load repositories.');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+  // Fetch repositories function
+  const fetchRepos = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      let data: Repo[] = [];
+      if (selectedOrg) {
+        data = await reposApi.listOrgRepos(selectedOrg);
+      } else {
+        data = await reposApi.list();
       }
-    })();
-    return () => { cancelled = true; };
+      setRepos(data || []);
+      setTimeout(() => {
+        ScrollReveal().reveal('.reveal-card', {
+          container: mainRef.current || undefined,
+          origin: 'bottom',
+          distance: '20px',
+          duration: 600,
+          delay: 50,
+          interval: 60,
+          opacity: 0,
+          scale: 0.98,
+          reset: false,
+        });
+      }, 50);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message ?? 'Failed to load repositories.');
+    } finally {
+      setLoading(false);
+    }
   }, [selectedOrg]);
+
+  // Fetch repositories on mount, when organization changes, or when switching to Dashboard/Synced Repos tabs
+  useEffect(() => {
+    if (activeIdx < 2) {
+      fetchRepos();
+    }
+  }, [fetchRepos, activeIdx]);
+
 
   const handleView = (repo: Repo) => {
     const [owner] = repo.full_name.split('/');
@@ -778,6 +776,14 @@ export default function Dashboard() {
                   </option>
                 ))}
               </select>
+              <button
+                onClick={fetchRepos}
+                disabled={loading}
+                title="Refresh repositories"
+                className="p-1.5 bg-[#111111] hover:bg-[#1f1f1f] text-[#a0a0a0] hover:text-white border border-[#2a2a2a] rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              </button>
             </div>
           )}
         </div>
