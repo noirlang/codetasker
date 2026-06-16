@@ -92,7 +92,36 @@ prompt_required GITHUB_CLIENT_SECRET "Enter GitHub OAuth Client Secret"
 prompt_default GITHUB_REDIRECT_URL "Enter GitHub OAuth Redirect URL" "http://localhost:8080/api/auth/github/callback"
 prompt_default FRONTEND_URL "Enter Frontend URL" "http://localhost:5173"
 
+# SMTP Prompts
+echo ""
+read -p "$(echo -e "${YELLOW}Do you want to enable email notifications (SMTP)? (y/n) ${NC}[Default: n]: ")" enable_smtp
+if [ "$enable_smtp" = "y" ] || [ "$enable_smtp" = "Y" ]; then
+  SMTP_ENABLED="true"
+  prompt_required SMTP_HOST "Enter SMTP Host (e.g., mail.noirlang.tr)"
+  prompt_default SMTP_PORT "Enter SMTP Port" "465"
+  prompt_required SMTP_USERNAME "Enter SMTP Username"
+  
+  # Read password securely (without echoing)
+  while true; do
+    read -sp "$(echo -e "${YELLOW}Enter SMTP Password (Required): ${NC}")" SMTP_PASSWORD
+    echo ""
+    if [ -n "$SMTP_PASSWORD" ]; then
+      break
+    fi
+  done
+
+  prompt_default SMTP_FROM "Enter SMTP From Header" "CodeTasker <$SMTP_USERNAME>"
+else
+  SMTP_ENABLED="false"
+  SMTP_HOST=""
+  SMTP_PORT=""
+  SMTP_USERNAME=""
+  SMTP_PASSWORD=""
+  SMTP_FROM=""
+fi
+
 # Secret generation or prompt
+echo ""
 read -p "$(echo -e "${CYAN}Enter JWT Secret (leave blank to auto-generate secure key)${NC}: ")" JWT_SECRET
 if [ -z "$JWT_SECRET" ]; then
   JWT_SECRET=$(generate_key 64)
@@ -133,6 +162,14 @@ WEBHOOK_SECRET=$WEBHOOK_SECRET
 TOKEN_ENCRYPT_KEY=$TOKEN_ENCRYPT_KEY
 
 FRONTEND_URL=$FRONTEND_URL
+
+# SMTP configuration
+SMTP_ENABLED=$SMTP_ENABLED
+SMTP_HOST=$SMTP_HOST
+SMTP_PORT=$SMTP_PORT
+SMTP_USERNAME=$SMTP_USERNAME
+SMTP_PASSWORD=$SMTP_PASSWORD
+SMTP_FROM=$SMTP_FROM
 EOF
 
 echo -e "${GREEN}[+] Configuration saved to .env successfully!${NC}"
