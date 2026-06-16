@@ -3,6 +3,7 @@
 package service
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/smtp"
 	"strings"
@@ -90,11 +91,60 @@ func (s *EmailService) send(to, subject, body string) error {
 	}, "\r\n")
 	message := []byte(headers + "\r\n\r\n" + body)
 
+	// If port is 465, use implicit TLS connection
+	if s.cfg.SMTPPort == "465" {
+		tlsConfig := &tls.Config{
+			ServerName: s.cfg.SMTPHost,
+		}
+		conn, err := tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			s.log.Error("failed to connect via TLS on 465", zap.String("to", to), zap.Error(err))
+			return fmt.Errorf("tls dial: %w", err)
+		}
+		defer conn.Close()
+
+		client, err := smtp.NewClient(conn, s.cfg.SMTPHost)
+		if err != nil {
+			s.log.Error("failed to create SMTP client on 465", zap.String("to", to), zap.Error(err))
+			return fmt.Errorf("smtp client: %w", err)
+		}
+		defer client.Quit()
+
+		if err = client.Auth(auth); err != nil {
+			s.log.Error("SMTP authentication failed on 465", zap.String("to", to), zap.Error(err))
+			return fmt.Errorf("smtp auth: %w", err)
+		}
+
+		if err = client.Mail(s.cfg.SMTPUsername); err != nil {
+			return fmt.Errorf("smtp mail from: %w", err)
+		}
+		if err = client.Rcpt(to); err != nil {
+			return fmt.Errorf("smtp rcpt to: %w", err)
+		}
+
+		w, err := client.Data()
+		if err != nil {
+			return fmt.Errorf("smtp data: %w", err)
+		}
+		_, err = w.Write(message)
+		if err != nil {
+			return fmt.Errorf("write message: %w", err)
+		}
+		err = w.Close()
+		if err != nil {
+			return fmt.Errorf("close message: %w", err)
+		}
+
+		s.log.Info("email sent successfully via TLS (465)", zap.String("to", to), zap.String("subject", subject))
+		return nil
+	}
+
+	// For other ports (e.g. 587 STARTTLS), use standard smtp.SendMail
 	if err := smtp.SendMail(addr, auth, s.cfg.SMTPUsername, []string{to}, message); err != nil {
 		s.log.Error("failed to send email", zap.String("to", to), zap.Error(err))
 		return fmt.Errorf("send email to %s: %w", to, err)
 	}
 
-	s.log.Info("email sent", zap.String("to", to), zap.String("subject", subject))
+	s.log.Info("email sent successfully", zap.String("to", to), zap.String("subject", subject))
 	return nil
 }
