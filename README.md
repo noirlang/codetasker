@@ -77,15 +77,25 @@ npm run dev
 
 The frontend will start at `http://localhost:5173/` and proxy API requests to `http://localhost:8080`.
 
-## Running with Docker Compose
+## Quick Installation & Docker Setup
 
-To start the entire environment (MongoDB, Go API Backend, and React Frontend) with one command:
+To quickly configure environment variables and launch the entire platform (MongoDB + Go API Backend + React Frontend) using Docker, run the interactive installation script at the project root:
 
 ```bash
-docker-compose up --build
+./setup.sh
 ```
 
-Ensure you have defined your OAuth credentials (`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`) in your root `.env` file before running compose.
+This script will:
+1. Verify system prerequisites (`docker` and `docker compose`).
+2. Prompt you step-by-step for configuration settings (Port, Database name, GitHub OAuth credentials, SMTP/email settings, etc.).
+3. Auto-generate secure cryptographic keys if left blank (JWT secrets, AES-256 token encryption keys, webhook secrets).
+4. Save the configuration to `.env` and offer to run the Docker Compose environment in the background automatically.
+
+Alternatively, you can manually build and start the containers after creating your `.env` configuration:
+
+```bash
+docker compose up -d --build
+```
 
 ## Contributing
 
