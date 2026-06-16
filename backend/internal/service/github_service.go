@@ -996,3 +996,148 @@ func getCommentPrefix(filePath string) string {
 	}
 	return "//"
 }
+
+// ListIssues fetches open or all issues for a repository (pull requests are filtered out).
+// state defaults to "open" if empty.
+func (s *GithubService) ListIssues(ctx context.Context, userID primitive.ObjectID, owner, repo, state string) ([]*github.Issue, error) {
+	if !safeNamePattern.MatchString(owner) || !safeNamePattern.MatchString(repo) {
+		return nil, fmt.Errorf("invalid owner/repo parameter")
+	}
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("ListIssues resolveToken: %w", err)
+	}
+	client := newGithubClient(ctx, token)
+	if state == "" {
+		state = "open"
+	}
+	issues, _, err := client.Issues.ListByRepo(ctx, owner, repo, &github.IssueListByRepoOptions{
+		State:       state,
+		ListOptions: github.ListOptions{PerPage: 50},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ListIssues GitHub API: %w", err)
+	}
+	// Filter out pull requests — GitHub Issues API includes PRs in the response.
+	var result []*github.Issue
+	for _, i := range issues {
+		if i.PullRequestLinks == nil {
+			result = append(result, i)
+		}
+	}
+	return result, nil
+}
+
+// CreateIssue creates a new GitHub issue in the specified repository.
+func (s *GithubService) CreateIssue(ctx context.Context, userID primitive.ObjectID, owner, repo, title, body string, labels []string) (*github.Issue, error) {
+	if !safeNamePattern.MatchString(owner) || !safeNamePattern.MatchString(repo) {
+		return nil, fmt.Errorf("invalid owner/repo parameter")
+	}
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("CreateIssue resolveToken: %w", err)
+	}
+	client := newGithubClient(ctx, token)
+	issue, _, err := client.Issues.Create(ctx, owner, repo, &github.IssueRequest{
+		Title:  &title,
+		Body:   &body,
+		Labels: &labels,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("CreateIssue GitHub API: %w", err)
+	}
+	return issue, nil
+}
+
+// UpdateIssueState opens or closes a GitHub issue identified by its number.
+func (s *GithubService) UpdateIssueState(ctx context.Context, userID primitive.ObjectID, owner, repo string, number int, state string) (*github.Issue, error) {
+	if !safeNamePattern.MatchString(owner) || !safeNamePattern.MatchString(repo) {
+		return nil, fmt.Errorf("invalid owner/repo parameter")
+	}
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("UpdateIssueState resolveToken: %w", err)
+	}
+	client := newGithubClient(ctx, token)
+	issue, _, err := client.Issues.Edit(ctx, owner, repo, number, &github.IssueRequest{State: &state})
+	if err != nil {
+		return nil, fmt.Errorf("UpdateIssueState GitHub API: %w", err)
+	}
+	return issue, nil
+}
+
+// ListBranches returns all branches for a repository (up to 100).
+func (s *GithubService) ListBranches(ctx context.Context, userID primitive.ObjectID, owner, repo string) ([]*github.Branch, error) {
+	if !safeNamePattern.MatchString(owner) || !safeNamePattern.MatchString(repo) {
+		return nil, fmt.Errorf("invalid owner/repo parameter")
+	}
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("ListBranches resolveToken: %w", err)
+	}
+	client := newGithubClient(ctx, token)
+	branches, _, err := client.Repositories.ListBranches(ctx, owner, repo, &github.BranchListOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ListBranches GitHub API: %w", err)
+	}
+	return branches, nil
+}
+
+// CreateBranch creates a new branch from a given commit SHA.
+func (s *GithubService) CreateBranch(ctx context.Context, userID primitive.ObjectID, owner, repo, branchName, fromSHA string) error {
+	if !safeNamePattern.MatchString(owner) || !safeNamePattern.MatchString(repo) || !safeNamePattern.MatchString(branchName) {
+		return fmt.Errorf("invalid parameter")
+	}
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("CreateBranch resolveToken: %w", err)
+	}
+	client := newGithubClient(ctx, token)
+	ref := "refs/heads/" + branchName
+	_, _, err = client.Git.CreateRef(ctx, owner, repo, &github.Reference{
+		Ref:    &ref,
+		Object: &github.GitObject{SHA: &fromSHA},
+	})
+	if err != nil {
+		return fmt.Errorf("CreateBranch GitHub API: %w", err)
+	}
+	return nil
+}
+
+// DeleteBranch deletes a branch from a repository.
+func (s *GithubService) DeleteBranch(ctx context.Context, userID primitive.ObjectID, owner, repo, branchName string) error {
+	if !safeNamePattern.MatchString(owner) || !safeNamePattern.MatchString(repo) {
+		return fmt.Errorf("invalid parameter")
+	}
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("DeleteBranch resolveToken: %w", err)
+	}
+	client := newGithubClient(ctx, token)
+	ref := "refs/heads/" + branchName
+	_, err = client.Git.DeleteRef(ctx, owner, repo, ref)
+	if err != nil {
+		return fmt.Errorf("DeleteBranch GitHub API: %w", err)
+	}
+	return nil
+}
+
+// GetCommitDiff returns the detailed commit object (including file changes and patches)
+// for the specified commit SHA.
+func (s *GithubService) GetCommitDiff(ctx context.Context, userID primitive.ObjectID, owner, repo, sha string) (*github.RepositoryCommit, error) {
+	if !safeNamePattern.MatchString(owner) || !safeNamePattern.MatchString(repo) {
+		return nil, fmt.Errorf("invalid owner/repo parameter")
+	}
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("GetCommitDiff resolveToken: %w", err)
+	}
+	client := newGithubClient(ctx, token)
+	commit, _, err := client.Repositories.GetCommit(ctx, owner, repo, sha, nil)
+	if err != nil {
+		return nil, fmt.Errorf("GetCommitDiff GitHub API: %w", err)
+	}
+	return commit, nil
+}

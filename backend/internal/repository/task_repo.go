@@ -199,3 +199,28 @@ func (r *TaskRepository) DeleteTask(ctx context.Context, id primitive.ObjectID) 
 	return nil
 }
 
+// UpdateAssignee sets or clears the assignee for a task identified by id.
+// When assigneeID is non-nil the username and avatarURL are written alongside it.
+// When assigneeID is nil all three assignee fields are cleared (empty strings / nil).
+func (r *TaskRepository) UpdateAssignee(ctx context.Context, id primitive.ObjectID, assigneeID *primitive.ObjectID, username, avatarURL string) error {
+	filter := bson.M{"_id": id}
+	setFields := bson.M{"updated_at": time.Now().UTC()}
+	if assigneeID != nil {
+		setFields["assignee_id"] = assigneeID
+		setFields["assignee_username"] = username
+		setFields["assignee_avatar_url"] = avatarURL
+	} else {
+		setFields["assignee_id"] = nil
+		setFields["assignee_username"] = ""
+		setFields["assignee_avatar_url"] = ""
+	}
+	update := bson.M{"$set": setFields}
+	res, err := r.col.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("UpdateAssignee(%s): %w", id.Hex(), err)
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("task %s not found", id.Hex())
+	}
+	return nil
+}

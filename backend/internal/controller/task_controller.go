@@ -1,10 +1,12 @@
 // Package controller implements the HTTP handler layer of CodeTasker.
 // task_controller.go exposes endpoints for listing tasks by repository,
-// updating task status, and injecting new TODO comments into repositories.
-// All routes require a valid JWT (Protected middleware applied at group level).
+// updating task status/assignee, injecting new TODO comments, and managing
+// per-task comments. All routes require a valid JWT (Protected middleware
+// applied at group level).
 package controller
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/codetasker/backend/internal/domain"
@@ -12,6 +14,7 @@ import (
 	"github.com/codetasker/backend/internal/repository"
 	"github.com/codetasker/backend/internal/service"
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // TaskController handles all task-related HTTP endpoints, delegating business
@@ -21,6 +24,13 @@ type TaskController struct {
 	githubService    *service.GithubService
 	syncedRepoRepo   *repository.SyncedRepository
 	collaboratorRepo *repository.CollaboratorRepository
+	commentRepo      *repository.CommentRepository
+	notifRepo        *repository.NotificationRepository
+	activityRepo     *repository.ActivityRepository
+	userRepo         *repository.UserRepository
+	emailService     *service.EmailService
+	// taskRepo is kept for direct UpdateAssignee calls.
+	taskRepo *repository.TaskRepository
 }
 
 // NewTaskController constructs a TaskController with its dependencies injected.
@@ -29,12 +39,24 @@ func NewTaskController(
 	githubService *service.GithubService,
 	syncedRepoRepo *repository.SyncedRepository,
 	collaboratorRepo *repository.CollaboratorRepository,
+	commentRepo *repository.CommentRepository,
+	notifRepo *repository.NotificationRepository,
+	activityRepo *repository.ActivityRepository,
+	userRepo *repository.UserRepository,
+	emailService *service.EmailService,
+	taskRepo *repository.TaskRepository,
 ) *TaskController {
 	return &TaskController{
 		taskService:      taskService,
 		githubService:    githubService,
 		syncedRepoRepo:   syncedRepoRepo,
 		collaboratorRepo: collaboratorRepo,
+		commentRepo:      commentRepo,
+		notifRepo:        notifRepo,
+		activityRepo:     activityRepo,
+		userRepo:         userRepo,
+		emailService:     emailService,
+		taskRepo:         taskRepo,
 	}
 }
 
@@ -44,6 +66,10 @@ func (tc *TaskController) RegisterRoutes(group fiber.Router) {
 	group.Get("/tasks", tc.ListTasksByRepo)
 	group.Patch("/tasks/:id", tc.UpdateTaskStatus)
 	group.Post("/tasks/inject", tc.InjectTODO)
+	// Comment sub-resources on tasks.
+	group.Get("/tasks/:id/comments", tc.ListComments)
+	group.Post("/tasks/:id/comments", tc.AddComment)
+	group.Delete("/tasks/:id/comments/:commentId", tc.DeleteComment)
 }
 
 // ListTasksByRepo returns all tasks for a repository, identified by the
@@ -87,9 +113,9 @@ func (tc *TaskController) ListTasksByRepo(c *fiber.Ctx) error {
 	})
 }
 
-// UpdateTaskStatus changes the lifecycle status of a task.
-// The request body must contain a JSON object with the "status" field set to
-// one of: "open", "in_progress", or "resolved".
+// UpdateTaskStatus changes the lifecycle status of a task, optionally sets a PR URL,
+// and handles assignee updates (set or clear). Activity logs and notifications are
+// created for assignee changes.
 //
 // Route: PATCH /api/tasks/:id
 func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
@@ -116,7 +142,7 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	// Verify collaborator permissions
+	// Verify collaborator permissions.
 	synced, err := tc.syncedRepoRepo.FindByRepoIDOnly(c.Context(), task.RepoID)
 	if err == nil && synced != nil {
 		if synced.UserID != userID {
@@ -134,42 +160,149 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "invalid_body",
-			"message": "request body must be valid JSON with 'status' and/or 'pr_url' fields",
+			"message": "request body must be valid JSON with 'status', 'pr_url', 'assignee_username', or 'clear_assignee' fields",
 		})
 	}
 
-	if req.Status == "" && req.PullRequestURL == "" {
+	if req.Status == "" && req.PullRequestURL == "" && req.AssigneeUsername == "" && !req.ClearAssignee {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "missing_fields",
-			"message": "at least one of 'status' or 'pr_url' field is required",
+			"message": "at least one of 'status', 'pr_url', 'assignee_username', or 'clear_assignee' is required",
 		})
 	}
 
-	updatedTask, err := tc.taskService.UpdateTask(c.Context(), taskID, req.Status, req.PullRequestURL)
-	if err != nil {
-		// If the error message indicates the task was not found, return 404.
-		if isNotFoundError(err.Error()) {
+	// ── Handle assignee update ─────────────────────────────────────────────────
+	taskObjID, _ := primitive.ObjectIDFromHex(taskID)
+
+	// Look up the current user for activity logging.
+	actor, _ := tc.userRepo.FindByObjectID(c.Context(), userID)
+	actorName := ""
+	actorAvatar := ""
+	if actor != nil {
+		actorName = actor.Username
+		actorAvatar = actor.AvatarURL
+	}
+
+	if req.ClearAssignee {
+		// Clear the assignee fields.
+		if err := tc.taskRepo.UpdateAssignee(c.Context(), taskObjID, nil, "", ""); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":   "update_failed",
+				"message": err.Error(),
+			})
+		}
+		// Log the clear-assignee activity.
+		_ = tc.activityRepo.Log(c.Context(), &domain.ActivityLog{
+			RepoID:      task.RepoID,
+			RepoName:    task.RepoName,
+			ActorID:     userID,
+			ActorName:   actorName,
+			ActorAvatar: actorAvatar,
+			Action:      "assignee_cleared",
+			TargetType:  "task",
+			TargetID:    taskID,
+			TargetLabel: task.Content,
+		})
+	} else if req.AssigneeUsername != "" {
+		// Look up the assignee in the user repository.
+		assignee, err := tc.userRepo.FindByUsername(c.Context(), req.AssigneeUsername)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":   "database_error",
+				"message": err.Error(),
+			})
+		}
+		if assignee == nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":   "user_not_found",
+				"message": fmt.Sprintf("user '%s' is not registered in CodeTasker", req.AssigneeUsername),
+			})
+		}
+
+		// Persist the assignee.
+		if err := tc.taskRepo.UpdateAssignee(c.Context(), taskObjID, &assignee.ID, assignee.Username, assignee.AvatarURL); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":   "update_failed",
+				"message": err.Error(),
+			})
+		}
+
+		// Create an in-app notification for the assignee (skip if self-assigning).
+		if assignee.ID != userID {
+			_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
+				UserID:  assignee.ID,
+				Type:    domain.NotifTaskAssigned,
+				Title:   "You've been assigned to a task",
+				Message: fmt.Sprintf("%s assigned you to: %s", actorName, task.Content),
+				Link:    fmt.Sprintf("/repos/%s/tasks", task.RepoName),
+			})
+		}
+
+		// Log the assignment activity.
+		_ = tc.activityRepo.Log(c.Context(), &domain.ActivityLog{
+			RepoID:      task.RepoID,
+			RepoName:    task.RepoName,
+			ActorID:     userID,
+			ActorName:   actorName,
+			ActorAvatar: actorAvatar,
+			Action:      "task_assigned",
+			TargetType:  "task",
+			TargetID:    taskID,
+			TargetLabel: task.Content,
+			Meta:        map[string]string{"assignee": req.AssigneeUsername},
+		})
+
+		// Send email notification (non-fatal if SMTP is not configured).
+		// Note: email address is not stored in the User model; the email service
+		// is a no-op when SMTPEnabled=false, so we skip the call gracefully.
+		_ = tc.emailService.SendTaskAssigned(
+			"", // email address not available in User model
+			assignee.Username,
+			actorName,
+			task.Content,
+			task.RepoName,
+			"",
+		)
+	}
+
+	// ── Handle status / PR URL update (if provided) ────────────────────────────
+	var updatedTask *domain.Task
+	if req.Status != "" || req.PullRequestURL != "" {
+		updatedTask, err = tc.taskService.UpdateTask(c.Context(), taskID, req.Status, req.PullRequestURL)
+		if err != nil {
+			// If the error message indicates the task was not found, return 404.
+			if isNotFoundError(err.Error()) {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error":   "not_found",
+					"message": "task not found: " + taskID,
+				})
+			}
+			// Invalid ID format or unknown status — return 400.
+			if isValidationError(err.Error()) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error":   "validation_error",
+					"message": err.Error(),
+				})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":   "update_failed",
+				"message": err.Error(),
+			})
+		}
+	} else {
+		// Re-fetch the task so we return the current state.
+		updatedTask, err = tc.taskService.GetTaskByID(c.Context(), taskID)
+		if err != nil || updatedTask == nil {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error":   "not_found",
 				"message": "task not found: " + taskID,
 			})
 		}
-		// Invalid ID format or unknown status — return 400.
-		if isValidationError(err.Error()) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":   "validation_error",
-				"message": err.Error(),
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "update_failed",
-			"message": err.Error(),
-		})
 	}
 
 	return c.JSON(fiber.Map{
 		"task":    updatedTask,
-		"message": "task status updated successfully",
+		"message": "task updated successfully",
 	})
 }
 
@@ -210,7 +343,7 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 		})
 	}
 
-	// Verify collaborator permissions before injecting TODO
+	// Verify collaborator permissions before injecting TODO.
 	synced, err := tc.syncedRepoRepo.FindByRepoName(c.Context(), req.RepoOwner+"/"+req.RepoName)
 	if err == nil && synced != nil {
 		if synced.UserID != userID {
@@ -255,6 +388,191 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 		"message": "TODO injected successfully",
 		"pr_url":  prURL,
 	})
+}
+
+// ListComments returns all comments for a task.
+//
+// Route: GET /api/tasks/:id/comments
+func (tc *TaskController) ListComments(c *fiber.Ctx) error {
+	taskIDStr := c.Params("id")
+	taskObjID, err := primitive.ObjectIDFromHex(taskIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_id",
+			"message": "task ID is not a valid ObjectID",
+		})
+	}
+
+	comments, err := tc.commentRepo.FindByTask(c.Context(), taskObjID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "fetch_comments_failed",
+			"message": err.Error(),
+		})
+	}
+	return c.JSON(fiber.Map{"comments": comments, "count": len(comments)})
+}
+
+// AddComment adds a new comment to a task. It also creates a notification for
+// the task's assignee (if different from the commenter) and logs the activity.
+//
+// Route: POST /api/tasks/:id/comments
+func (tc *TaskController) AddComment(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	taskIDStr := c.Params("id")
+	taskObjID, err := primitive.ObjectIDFromHex(taskIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_id",
+			"message": "task ID is not a valid ObjectID",
+		})
+	}
+
+	// Fetch task to validate it exists and to use its metadata.
+	task, err := tc.taskService.GetTaskByID(c.Context(), taskIDStr)
+	if err != nil || task == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "not_found",
+			"message": "task not found",
+		})
+	}
+
+	// Parse comment body.
+	type addCommentRequest struct {
+		Content string `json:"content"`
+	}
+	var req addCommentRequest
+	if err := c.BodyParser(&req); err != nil || req.Content == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_body",
+			"message": "field 'content' is required",
+		})
+	}
+
+	// Look up the commenter's profile.
+	commenter, err := tc.userRepo.FindByObjectID(c.Context(), userID)
+	if err != nil || commenter == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "user not found"})
+	}
+
+	// Persist the comment.
+	comment := &domain.Comment{
+		TaskID:    taskObjID,
+		UserID:    userID,
+		Username:  commenter.Username,
+		AvatarURL: commenter.AvatarURL,
+		Content:   req.Content,
+	}
+	if err := tc.commentRepo.Create(c.Context(), comment); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "create_comment_failed",
+			"message": err.Error(),
+		})
+	}
+
+	// Notify the task's assignee if they are different from the commenter.
+	if task.AssigneeID != nil && *task.AssigneeID != userID {
+		_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
+			UserID:  *task.AssigneeID,
+			Type:    domain.NotifCommentAdded,
+			Title:   "New comment on your task",
+			Message: fmt.Sprintf("%s commented: %s", commenter.Username, req.Content),
+			Link:    fmt.Sprintf("/repos/%s/tasks", task.RepoName),
+		})
+	}
+
+	// Log the comment activity.
+	_ = tc.activityRepo.Log(c.Context(), &domain.ActivityLog{
+		RepoID:      task.RepoID,
+		RepoName:    task.RepoName,
+		ActorID:     userID,
+		ActorName:   commenter.Username,
+		ActorAvatar: commenter.AvatarURL,
+		Action:      "comment_added",
+		TargetType:  "task",
+		TargetID:    taskIDStr,
+		TargetLabel: task.Content,
+		Meta:        map[string]string{"comment_id": comment.ID.Hex()},
+	})
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"comment": comment,
+		"message": "comment added successfully",
+	})
+}
+
+// DeleteComment removes a comment from a task. Only the comment author or a
+// repo owner/maintainer may delete a comment.
+//
+// Route: DELETE /api/tasks/:id/comments/:commentId
+func (tc *TaskController) DeleteComment(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	commentIDStr := c.Params("commentId")
+	commentObjID, err := primitive.ObjectIDFromHex(commentIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_id",
+			"message": "comment ID is not a valid ObjectID",
+		})
+	}
+
+	// Fetch the comment to verify ownership.
+	comment, err := tc.commentRepo.FindByID(c.Context(), commentObjID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "fetch_failed",
+			"message": err.Error(),
+		})
+	}
+	if comment == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "not_found",
+			"message": "comment not found",
+		})
+	}
+
+	// Allow if the user is the comment author.
+	if comment.UserID != userID {
+		// Otherwise check for owner/maintainer role on the repo.
+		task, _ := tc.taskService.GetTaskByID(c.Context(), c.Params("id"))
+		authorized := false
+		if task != nil {
+			synced, _ := tc.syncedRepoRepo.FindByRepoIDOnly(c.Context(), task.RepoID)
+			if synced != nil {
+				if synced.UserID == userID {
+					authorized = true
+				} else {
+					collab, _ := tc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
+					if collab != nil && (collab.Role == domain.RoleOwner || collab.Role == domain.RoleMaintainer) {
+						authorized = true
+					}
+				}
+			}
+		}
+		if !authorized {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "forbidden",
+				"message": "You are not allowed to delete this comment",
+			})
+		}
+	}
+
+	if err := tc.commentRepo.Delete(c.Context(), commentObjID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "delete_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{"message": "comment deleted successfully"})
 }
 
 // isNotFoundError checks whether an error message indicates a "not found" condition.

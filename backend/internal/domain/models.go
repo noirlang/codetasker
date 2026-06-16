@@ -98,6 +98,15 @@ type Task struct {
 
 	// UpdatedAt is refreshed on every upsert or status change.
 	UpdatedAt time.Time `bson:"updated_at" json:"updated_at"`
+
+	// AssigneeID is the MongoDB ObjectID of the assigned user (optional).
+	AssigneeID *primitive.ObjectID `bson:"assignee_id,omitempty" json:"assignee_id,omitempty"`
+
+	// AssigneeUsername is the GitHub login of the assigned user.
+	AssigneeUsername string `bson:"assignee_username,omitempty" json:"assignee_username,omitempty"`
+
+	// AssigneeAvatarURL is the avatar of the assigned user.
+	AssigneeAvatarURL string `bson:"assignee_avatar_url,omitempty" json:"assignee_avatar_url,omitempty"`
 }
 
 // InjectTaskRequest is the request body for POST /api/tasks/inject.
@@ -127,13 +136,19 @@ type InjectTaskRequest struct {
 }
 
 // UpdateTaskRequest is the request body for PATCH /api/tasks/:id.
-// It allows updating the lifecycle status and/or linking a PR URL to the task.
+// It allows updating the lifecycle status, linking a PR URL, assigning a user, or clearing the assignee.
 type UpdateTaskRequest struct {
 	// Status is the new lifecycle state to apply to the task.
 	Status TaskStatus `json:"status,omitempty"`
 
 	// PullRequestURL is the Pull Request URL linked to the task.
 	PullRequestURL string `json:"pr_url,omitempty"`
+
+	// AssigneeUsername is the GitHub login of the user to assign to this task.
+	AssigneeUsername string `json:"assignee_username,omitempty"`
+
+	// ClearAssignee when true removes any existing assignee from the task.
+	ClearAssignee bool `json:"clear_assignee,omitempty"`
 }
 
 // SyncedRepo represents a repository that has been activated/synced by a user.
@@ -166,4 +181,61 @@ type Collaborator struct {
 	AvatarURL string             `bson:"avatar_url" json:"avatar_url"`
 	Role      RepoRole           `bson:"role" json:"role"`
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
+}
+
+// Comment represents a user comment on a task.
+type Comment struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	TaskID    primitive.ObjectID `bson:"task_id" json:"task_id"`
+	UserID    primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Username  string             `bson:"username" json:"username"`
+	AvatarURL string             `bson:"avatar_url" json:"avatar_url"`
+	Content   string             `bson:"content" json:"content"`
+	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
+	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
+}
+
+// NotificationType classifies the kind of event that triggered a notification.
+type NotificationType string
+
+const (
+	// NotifTaskAssigned is sent when a user is assigned to a task.
+	NotifTaskAssigned NotificationType = "task_assigned"
+
+	// NotifCommentAdded is sent when someone comments on a task the user is involved with.
+	NotifCommentAdded NotificationType = "comment_added"
+
+	// NotifPRMerged is sent when a pull request linked to a task is merged.
+	NotifPRMerged NotificationType = "pr_merged"
+)
+
+// Notification represents a notification sent to a user.
+type Notification struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID    primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Type      NotificationType   `bson:"type" json:"type"`
+	Title     string             `bson:"title" json:"title"`
+	Message   string             `bson:"message" json:"message"`
+	Link      string             `bson:"link,omitempty" json:"link,omitempty"`
+	Read      bool               `bson:"read" json:"read"`
+	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
+}
+
+// ActivityLog represents an activity event in a repository.
+type ActivityLog struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	RepoID      int64              `bson:"repo_id" json:"repo_id"`
+	RepoName    string             `bson:"repo_name" json:"repo_name"`
+	ActorID     primitive.ObjectID `bson:"actor_id" json:"actor_id"`
+	ActorName   string             `bson:"actor_name" json:"actor_name"`
+	ActorAvatar string             `bson:"actor_avatar" json:"actor_avatar"`
+	// Action describes the event type, e.g. "task_created", "task_assigned", "status_changed", "comment_added".
+	Action string `bson:"action" json:"action"`
+	// TargetType is one of: "task", "pr", "collaborator".
+	TargetType string `bson:"target_type" json:"target_type"`
+	TargetID    string `bson:"target_id" json:"target_id"`
+	// TargetLabel is a human-readable description of the target.
+	TargetLabel string            `bson:"target_label" json:"target_label"`
+	Meta        map[string]string `bson:"meta,omitempty" json:"meta,omitempty"`
+	CreatedAt   time.Time         `bson:"created_at" json:"created_at"`
 }

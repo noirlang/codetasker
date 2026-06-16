@@ -23,6 +23,13 @@ import type {
   Organization,
   ActionWorkflow,
   ActionWorkflowRun,
+  Notification,
+  Comment,
+  Issue,
+  Branch,
+  CommitDetail,
+  RepoStats,
+  ActivityLog,
 } from '../types';
 
 // ── Axios instance ─────────────────────────────────────────────────────────
@@ -334,6 +341,119 @@ export const reposApi = {
     const { data } = await client.get<{ repos: Repo[] }>(`/orgs/${org}/repos`);
     return data.repos;
   },
+
+  /**
+   * List GitHub Issues for a repository.
+   * GET /api/repos/:owner/:repo/issues?state=<state>
+   */
+  listIssues: async (owner: string, repo: string, state = 'open'): Promise<Issue[]> => {
+    const { data } = await client.get<{ issues: Issue[] }>(
+      `/repos/${owner}/${repo}/issues`,
+      { params: { state } }
+    );
+    return data.issues || [];
+  },
+
+  /**
+   * Create a new GitHub Issue.
+   * POST /api/repos/:owner/:repo/issues
+   */
+  createIssue: async (
+    owner: string,
+    repo: string,
+    issueData: { title: string; body: string; labels: string[] }
+  ): Promise<Issue> => {
+    const { data } = await client.post<{ issue: Issue }>(
+      `/repos/${owner}/${repo}/issues`,
+      issueData
+    );
+    return data.issue;
+  },
+
+  /**
+   * Update a GitHub Issue's state (open/closed).
+   * PATCH /api/repos/:owner/:repo/issues/:number
+   */
+  updateIssue: async (
+    owner: string,
+    repo: string,
+    number: number,
+    state: string
+  ): Promise<Issue> => {
+    const { data } = await client.patch<{ issue: Issue }>(
+      `/repos/${owner}/${repo}/issues/${number}`,
+      { state }
+    );
+    return data.issue;
+  },
+
+  /**
+   * List branches for a repository.
+   * GET /api/repos/:owner/:repo/branches
+   */
+  listBranches: async (owner: string, repo: string): Promise<Branch[]> => {
+    const { data } = await client.get<{ branches: Branch[] }>(
+      `/repos/${owner}/${repo}/branches`
+    );
+    return data.branches || [];
+  },
+
+  /**
+   * Create a new branch.
+   * POST /api/repos/:owner/:repo/branches
+   */
+  createBranch: async (
+    owner: string,
+    repo: string,
+    branchData: { name: string; from_sha: string }
+  ): Promise<Branch> => {
+    const { data } = await client.post<{ branch: Branch }>(
+      `/repos/${owner}/${repo}/branches`,
+      branchData
+    );
+    return data.branch;
+  },
+
+  /**
+   * Delete a branch.
+   * DELETE /api/repos/:owner/:repo/branches/:branch
+   */
+  deleteBranch: async (owner: string, repo: string, branch: string): Promise<void> => {
+    await client.delete(`/repos/${owner}/${repo}/branches/${branch}`);
+  },
+
+  /**
+   * Fetch commit detail with file diffs.
+   * GET /api/repos/:owner/:repo/commits/:sha
+   */
+  getCommitDiff: async (owner: string, repo: string, sha: string): Promise<CommitDetail> => {
+    const { data } = await client.get<CommitDetail>(
+      `/repos/${owner}/${repo}/commits/${sha}`
+    );
+    return data;
+  },
+
+  /**
+   * Get repository task statistics.
+   * GET /api/repos/:owner/:repo/stats
+   */
+  getStats: async (owner: string, repo: string): Promise<RepoStats> => {
+    const { data } = await client.get<RepoStats>(
+      `/repos/${owner}/${repo}/stats`
+    );
+    return data;
+  },
+
+  /**
+   * Get repository activity feed.
+   * GET /api/repos/:owner/:repo/activity
+   */
+  getActivity: async (owner: string, repo: string): Promise<ActivityLog[]> => {
+    const { data } = await client.get<{ activities: ActivityLog[] }>(
+      `/repos/${owner}/${repo}/activity`
+    );
+    return data.activities || [];
+  },
 };
 
 // ── Tasks API ──────────────────────────────────────────────────────────────
@@ -365,7 +485,7 @@ export const tasksApi = {
    */
   updateTask: async (
     id: string,
-    updates: { status?: TaskStatus; pr_url?: string }
+    updates: { status?: TaskStatus; pr_url?: string; assignee_username?: string; clear_assignee?: boolean }
   ): Promise<Task> => {
     const { data } = await client.patch<Task>(`/tasks/${id}`, updates);
     return data;
@@ -383,6 +503,63 @@ export const tasksApi = {
     );
     return data;
   },
+};
+
+// ── Notifications API ──────────────────────────────────────────────────────
+
+export const notificationsApi = {
+  /**
+   * List all notifications for the authenticated user.
+   * GET /api/notifications
+   */
+  list: (): Promise<Notification[]> =>
+    client.get('/notifications').then((r) => (r.data.notifications as Notification[]) || []),
+
+  /**
+   * Get the count of unread notifications.
+   * GET /api/notifications/unread-count
+   */
+  unreadCount: (): Promise<number> =>
+    client.get('/notifications/unread-count').then((r) => r.data.count as number),
+
+  /**
+   * Mark a single notification as read.
+   * PATCH /api/notifications/:id/read
+   */
+  markRead: (id: string) => client.patch(`/notifications/${id}/read`),
+
+  /**
+   * Mark all notifications as read.
+   * PATCH /api/notifications/read-all
+   */
+  markAllRead: () => client.patch('/notifications/read-all'),
+};
+
+// ── Comments API ────────────────────────────────────────────────────────────
+
+export const commentsApi = {
+  /**
+   * List all comments for a task.
+   * GET /api/tasks/:id/comments
+   */
+  list: (taskId: string): Promise<Comment[]> =>
+    client.get(`/tasks/${taskId}/comments`).then((r) => (r.data.comments as Comment[]) || []),
+
+  /**
+   * Add a comment to a task.
+   * POST /api/tasks/:id/comments
+   */
+  add: (taskId: string, content: string): Promise<Comment> =>
+    client
+      .post(`/tasks/${taskId}/comments`, { content })
+      .then((r) => r.data.comment as Comment),
+
+  /**
+   * Delete a comment from a task.
+   * DELETE /api/tasks/:id/comments/:commentId
+   */
+  delete: (taskId: string, commentId: string) =>
+    client.delete(`/tasks/${taskId}/comments/${commentId}`),
 };
 
 export default client;

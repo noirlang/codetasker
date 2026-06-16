@@ -26,6 +26,8 @@ type RepoController struct {
 	syncedRepoRepo   *repository.SyncedRepository
 	collaboratorRepo *repository.CollaboratorRepository
 	userRepo         *repository.UserRepository
+	activityRepo     *repository.ActivityRepository
+	taskRepo         *repository.TaskRepository
 }
 
 // NewRepoController constructs a RepoController with its dependencies.
@@ -36,6 +38,8 @@ func NewRepoController(
 	syncedRepoRepo *repository.SyncedRepository,
 	collaboratorRepo *repository.CollaboratorRepository,
 	userRepo *repository.UserRepository,
+	activityRepo *repository.ActivityRepository,
+	taskRepo *repository.TaskRepository,
 ) *RepoController {
 	return &RepoController{
 		cfg:              cfg,
@@ -44,6 +48,8 @@ func NewRepoController(
 		syncedRepoRepo:   syncedRepoRepo,
 		collaboratorRepo: collaboratorRepo,
 		userRepo:         userRepo,
+		activityRepo:     activityRepo,
+		taskRepo:         taskRepo,
 	}
 }
 
@@ -68,6 +74,25 @@ func (rc *RepoController) RegisterRoutes(group fiber.Router) {
 	group.Post("/repos/:owner/:repo/collaborators", rc.AddCollaborator)
 	group.Patch("/repos/:owner/:repo/collaborators/:id", rc.UpdateCollaboratorRole)
 	group.Delete("/repos/:owner/:repo/collaborators/:id", rc.RemoveCollaborator)
+
+	// Issues
+	group.Get("/repos/:owner/:repo/issues", rc.ListIssues)
+	group.Post("/repos/:owner/:repo/issues", rc.CreateIssue)
+	group.Patch("/repos/:owner/:repo/issues/:number", rc.UpdateIssue)
+
+	// Branches
+	group.Get("/repos/:owner/:repo/branches", rc.ListBranches)
+	group.Post("/repos/:owner/:repo/branches", rc.CreateBranch)
+	group.Delete("/repos/:owner/:repo/branches/:branch", rc.DeleteBranch)
+
+	// Commit diff
+	group.Get("/repos/:owner/:repo/commits/:sha", rc.GetCommitDiff)
+
+	// Repository statistics
+	group.Get("/repos/:owner/:repo/stats", rc.GetRepoStats)
+
+	// Activity feed
+	group.Get("/repos/:owner/:repo/activity", rc.GetActivity)
 }
 
 // ListRepos returns the authenticated user's GitHub repositories.
@@ -1508,4 +1533,437 @@ func (rc *RepoController) ListOrgRepos(c *fiber.Ctx) error {
 		"repos": response,
 		"count": len(response),
 	})
+}
+
+// ListIssues returns open (or all) GitHub issues for a repository.
+// Requires ?state=open|closed|all; defaults to "open".
+//
+// Route: GET /api/repos/:owner/:repo/issues
+func (rc *RepoController) ListIssues(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+	state := c.Query("state", "open")
+
+	issues, err := rc.githubService.ListIssues(c.Context(), userID, owner, repo, state)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "list_issues_failed",
+			"message": err.Error(),
+		})
+	}
+
+	type issueResponse struct {
+		ID        int64    `json:"id"`
+		Number    int      `json:"number"`
+		Title     string   `json:"title"`
+		State     string   `json:"state"`
+		HTMLURL   string   `json:"html_url"`
+		Body      string   `json:"body"`
+		Labels    []string `json:"labels"`
+		Creator   string   `json:"creator"`
+		AvatarURL string   `json:"avatar_url"`
+		CreatedAt string   `json:"created_at"`
+		UpdatedAt string   `json:"updated_at"`
+	}
+
+	response := make([]issueResponse, 0, len(issues))
+	for _, issue := range issues {
+		if issue == nil {
+			continue
+		}
+		creator := ""
+		avatar := ""
+		if issue.User != nil {
+			creator = issue.User.GetLogin()
+			avatar = issue.User.GetAvatarURL()
+		}
+		createdAt := ""
+		if issue.CreatedAt != nil {
+			createdAt = issue.CreatedAt.Format(time.RFC3339)
+		}
+		updatedAt := ""
+		if issue.UpdatedAt != nil {
+			updatedAt = issue.UpdatedAt.Format(time.RFC3339)
+		}
+		labels := make([]string, 0, len(issue.Labels))
+		for _, l := range issue.Labels {
+			if l != nil {
+				labels = append(labels, l.GetName())
+			}
+		}
+		body := ""
+		if issue.Body != nil {
+			body = *issue.Body
+		}
+		response = append(response, issueResponse{
+			ID:        issue.GetID(),
+			Number:    issue.GetNumber(),
+			Title:     issue.GetTitle(),
+			State:     issue.GetState(),
+			HTMLURL:   issue.GetHTMLURL(),
+			Body:      body,
+			Labels:    labels,
+			Creator:   creator,
+			AvatarURL: avatar,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+		})
+	}
+
+	return c.JSON(fiber.Map{"issues": response, "count": len(response)})
+}
+
+// CreateIssue creates a new GitHub issue for a repository.
+//
+// Route: POST /api/repos/:owner/:repo/issues
+func (rc *RepoController) CreateIssue(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+
+	type requestBody struct {
+		Title  string   `json:"title"`
+		Body   string   `json:"body"`
+		Labels []string `json:"labels"`
+	}
+	var body requestBody
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid_request", "message": err.Error()})
+	}
+	if body.Title == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing_parameter", "message": "field 'title' is required"})
+	}
+
+	issue, err := rc.githubService.CreateIssue(c.Context(), userID, owner, repo, body.Title, body.Body, body.Labels)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "create_issue_failed", "message": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"issue": issue})
+}
+
+// UpdateIssue opens or closes a GitHub issue.
+//
+// Route: PATCH /api/repos/:owner/:repo/issues/:number
+func (rc *RepoController) UpdateIssue(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+	numberStr := c.Params("number")
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid_parameter", "message": "issue number must be an integer"})
+	}
+
+	type requestBody struct {
+		State string `json:"state"`
+	}
+	var body requestBody
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid_request", "message": err.Error()})
+	}
+	if body.State != "open" && body.State != "closed" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid_parameter", "message": "state must be 'open' or 'closed'"})
+	}
+
+	issue, err := rc.githubService.UpdateIssueState(c.Context(), userID, owner, repo, number, body.State)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "update_issue_failed", "message": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"issue": issue})
+}
+
+// ListBranches returns all branches for a repository.
+//
+// Route: GET /api/repos/:owner/:repo/branches
+func (rc *RepoController) ListBranches(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+
+	branches, err := rc.githubService.ListBranches(c.Context(), userID, owner, repo)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "list_branches_failed", "message": err.Error()})
+	}
+
+	type branchResponse struct {
+		Name string `json:"name"`
+		SHA  string `json:"sha"`
+	}
+	response := make([]branchResponse, 0, len(branches))
+	for _, b := range branches {
+		if b == nil {
+			continue
+		}
+		sha := ""
+		if b.Commit != nil {
+			sha = b.Commit.GetSHA()
+		}
+		response = append(response, branchResponse{
+			Name: b.GetName(),
+			SHA:  sha,
+		})
+	}
+
+	return c.JSON(fiber.Map{"branches": response, "count": len(response)})
+}
+
+// CreateBranch creates a new branch from a given SHA.
+// Requires owner or maintainer role.
+//
+// Route: POST /api/repos/:owner/:repo/branches
+func (rc *RepoController) CreateBranch(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+
+	// Verify owner/maintainer role.
+	synced, err := rc.syncedRepoRepo.FindByRepoName(c.Context(), owner+"/"+repo)
+	if err == nil && synced != nil && synced.UserID != userID {
+		collab, _ := rc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
+		if collab == nil || (collab.Role != domain.RoleOwner && collab.Role != domain.RoleMaintainer) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "forbidden", "message": "owner or maintainer role required"})
+		}
+	}
+
+	type requestBody struct {
+		Name    string `json:"name"`
+		FromSHA string `json:"from_sha"`
+	}
+	var body requestBody
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid_request", "message": err.Error()})
+	}
+	if body.Name == "" || body.FromSHA == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing_parameter", "message": "fields 'name' and 'from_sha' are required"})
+	}
+
+	if err := rc.githubService.CreateBranch(c.Context(), userID, owner, repo, body.Name, body.FromSHA); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "create_branch_failed", "message": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "branch created successfully", "name": body.Name})
+}
+
+// DeleteBranch deletes a branch from a repository.
+// Requires owner or maintainer role.
+//
+// Route: DELETE /api/repos/:owner/:repo/branches/:branch
+func (rc *RepoController) DeleteBranch(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+	branchName := c.Params("branch")
+
+	// Verify owner/maintainer role.
+	synced, err := rc.syncedRepoRepo.FindByRepoName(c.Context(), owner+"/"+repo)
+	if err == nil && synced != nil && synced.UserID != userID {
+		collab, _ := rc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
+		if collab == nil || (collab.Role != domain.RoleOwner && collab.Role != domain.RoleMaintainer) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "forbidden", "message": "owner or maintainer role required"})
+		}
+	}
+
+	if err := rc.githubService.DeleteBranch(c.Context(), userID, owner, repo, branchName); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "delete_branch_failed", "message": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"message": "branch deleted successfully"})
+}
+
+// GetCommitDiff returns the details of a single commit including changed files and patches.
+//
+// Route: GET /api/repos/:owner/:repo/commits/:sha
+func (rc *RepoController) GetCommitDiff(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+	sha := c.Params("sha")
+
+	commit, err := rc.githubService.GetCommitDiff(c.Context(), userID, owner, repo, sha)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "get_commit_diff_failed", "message": err.Error()})
+	}
+
+	type fileResponse struct {
+		Filename  string `json:"filename"`
+		Status    string `json:"status"`
+		Additions int    `json:"additions"`
+		Deletions int    `json:"deletions"`
+		Changes   int    `json:"changes"`
+		Patch     string `json:"patch,omitempty"`
+	}
+
+	files := make([]fileResponse, 0, len(commit.Files))
+	for _, f := range commit.Files {
+		if f == nil {
+			continue
+		}
+		patch := ""
+		if f.Patch != nil {
+			patch = *f.Patch
+		}
+		files = append(files, fileResponse{
+			Filename:  f.GetFilename(),
+			Status:    f.GetStatus(),
+			Additions: f.GetAdditions(),
+			Deletions: f.GetDeletions(),
+			Changes:   f.GetChanges(),
+			Patch:     patch,
+		})
+	}
+
+	msg := ""
+	author := ""
+	date := ""
+	if commit.Commit != nil {
+		msg = commit.Commit.GetMessage()
+		if commit.Commit.Author != nil {
+			author = commit.Commit.Author.GetName()
+			if commit.Commit.Author.Date != nil {
+				date = commit.Commit.Author.Date.Format(time.RFC3339)
+			}
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"sha":     commit.GetSHA(),
+		"message": msg,
+		"author":  author,
+		"date":    date,
+		"files":   files,
+		"stats": fiber.Map{
+			"additions": commit.GetStats().GetAdditions(),
+			"deletions": commit.GetStats().GetDeletions(),
+			"total":     commit.GetStats().GetTotal(),
+		},
+	})
+}
+
+// GetRepoStats returns aggregate task statistics for a repository.
+//
+// Route: GET /api/repos/:owner/:repo/stats
+func (rc *RepoController) GetRepoStats(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+
+	// Look up the synced repo to get its numeric ID.
+	synced, err := rc.syncedRepoRepo.FindByRepoName(c.Context(), owner+"/"+repo)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "database_error", "message": err.Error()})
+	}
+	if synced == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "not_found", "message": "repository is not synced in CodeTasker"})
+	}
+
+	// Verify the caller has at least viewer access.
+	isAuthorized := synced.UserID == userID
+	if !isAuthorized {
+		collab, _ := rc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
+		isAuthorized = collab != nil
+	}
+	if !isAuthorized {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "forbidden", "message": "access denied"})
+	}
+
+	// Fetch all tasks and aggregate counts in memory.
+	tasks, err := rc.taskRepo.FindByRepo(c.Context(), synced.RepoID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "fetch_tasks_failed", "message": err.Error()})
+	}
+
+	stats := struct {
+		Total      int            `json:"total"`
+		Open       int            `json:"open"`
+		InProgress int            `json:"in_progress"`
+		Resolved   int            `json:"resolved"`
+		ByType     map[string]int `json:"by_type"`
+	}{
+		ByType: make(map[string]int),
+	}
+
+	for _, t := range tasks {
+		stats.Total++
+		switch t.Status {
+		case domain.TaskStatusOpen:
+			stats.Open++
+		case domain.TaskStatusInProgress:
+			stats.InProgress++
+		case domain.TaskStatusResolved:
+			stats.Resolved++
+		}
+		if t.Type != "" {
+			stats.ByType[t.Type]++
+		}
+	}
+
+	return c.JSON(fiber.Map{"stats": stats})
+}
+
+// GetActivity returns the recent activity log for a repository.
+//
+// Route: GET /api/repos/:owner/:repo/activity
+func (rc *RepoController) GetActivity(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+
+	// Look up the synced repo to get its numeric ID.
+	synced, err := rc.syncedRepoRepo.FindByRepoName(c.Context(), owner+"/"+repo)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "database_error", "message": err.Error()})
+	}
+	if synced == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "not_found", "message": "repository is not synced in CodeTasker"})
+	}
+
+	// Verify the caller has at least viewer access.
+	isAuthorized := synced.UserID == userID
+	if !isAuthorized {
+		collab, _ := rc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
+		isAuthorized = collab != nil
+	}
+	if !isAuthorized {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "forbidden", "message": "access denied"})
+	}
+
+	activities, err := rc.activityRepo.FindByRepo(c.Context(), synced.RepoID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "fetch_activity_failed", "message": err.Error()})
+	}
+
+	// Suppress unused import warning — primitive is used elsewhere in this file.
+	_ = primitive.NilObjectID
+
+	return c.JSON(fiber.Map{"activities": activities, "count": len(activities)})
 }

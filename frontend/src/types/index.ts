@@ -182,7 +182,118 @@ export interface PullRequest {
   created_at: string;
 }
 
-/* ── GitHub Actions ──────────────────────────────────────── */
+/* ── Comments ─────────────────────────────────────────────────── */
+
+/** A comment on a task */
+export interface Comment {
+  id: string;
+  task_id: string;
+  user_id: string;
+  username: string;
+  avatar_url: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/* ── Notifications ────────────────────────────────────────────── */
+
+/** A user notification from the backend */
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: 'task_assigned' | 'comment_added' | 'pr_merged';
+  title: string;
+  message: string;
+  link?: string;
+  read: boolean;
+  created_at: string;
+}
+
+/* ── Activity Log ──────────────────────────────────────────────── */
+
+/** An activity/event in the repository activity feed */
+export interface ActivityLog {
+  id: string;
+  repo_id: number;
+  repo_name: string;
+  actor_name: string;
+  actor_avatar: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  target_label: string;
+  meta?: Record<string, string>;
+  created_at: string;
+}
+
+/* ── Issues ────────────────────────────────────────────────────── */
+
+/** A GitHub issue for a repository */
+export interface Issue {
+  number: number;
+  title: string;
+  body: string;
+  state: 'open' | 'closed';
+  html_url: string;
+  user: { login: string; avatar_url: string };
+  labels: Array<{ name: string; color: string }>;
+  created_at: string;
+  updated_at: string;
+  comments: number;
+}
+
+/* ── Branches ──────────────────────────────────────────────────── */
+
+/** A repository branch */
+export interface Branch {
+  name: string;
+  commit: { sha: string; url: string };
+  protected: boolean;
+}
+
+/* ── Commit Diff ───────────────────────────────────────────────── */
+
+/** A single file changed in a commit */
+export interface CommitFile {
+  filename: string;
+  status: 'added' | 'modified' | 'removed' | 'renamed';
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+}
+
+/** Full detail of a commit including file changes */
+export interface CommitDetail {
+  sha: string;
+  commit: {
+    message: string;
+    author: { name: string; date: string; email: string };
+  };
+  author?: { login: string; avatar_url: string };
+  stats: { total: number; additions: number; deletions: number };
+  files: CommitFile[];
+}
+
+/* ── Repo Stats ────────────────────────────────────────────────── */
+
+/** Aggregated statistics for a repository's tasks */
+export interface RepoStats {
+  total: number;
+  open: number;
+  in_progress: number;
+  resolved: number;
+  by_type: {
+    TODO?: number;
+    FIXME?: number;
+    HACK?: number;
+    BUG?: number;
+    NOTE?: number;
+  };
+}
+
+/* ── GitHub Actions ──────────────────────────────────────────── */
 
 export interface ActionWorkflow {
   id: number;

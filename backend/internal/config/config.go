@@ -51,6 +51,26 @@ type Config struct {
 	// WebhookProxyURL is an optional public proxy URL (e.g. smee.io or ngrok)
 	// used for webhook registration during local development.
 	WebhookProxyURL string
+
+	// SMTPHost is the hostname of the SMTP server used for sending emails.
+	SMTPHost string
+
+	// SMTPPort is the port of the SMTP server (typically "587" for STARTTLS).
+	SMTPPort string
+
+	// SMTPUsername is the SMTP authentication username (usually the sender's email address).
+	SMTPUsername string
+
+	// SMTPPassword is the SMTP authentication password or app-specific password.
+	SMTPPassword string
+
+	// SMTPFrom is the "From" header value for outgoing emails,
+	// e.g. "CodeTasker <noreply@codetasker.dev>".
+	SMTPFrom string
+
+	// SMTPEnabled controls whether email notifications are sent.
+	// Set SMTP_ENABLED=true in the environment to activate email delivery.
+	SMTPEnabled bool
 }
 
 // Load reads configuration from environment variables, validates that all required
@@ -69,6 +89,13 @@ func Load() (*Config, error) {
 		TokenEncryptKey:    os.Getenv("TOKEN_ENCRYPT_KEY"),
 		FrontendURL:        os.Getenv("FRONTEND_URL"),
 		WebhookProxyURL:    os.Getenv("WEBHOOK_PROXY_URL"),
+		// SMTP fields are optional — absent values simply disable email delivery.
+		SMTPHost:     os.Getenv("SMTP_HOST"),
+		SMTPPort:     os.Getenv("SMTP_PORT"),
+		SMTPUsername: os.Getenv("SMTP_USERNAME"),
+		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:     os.Getenv("SMTP_FROM"),
+		SMTPEnabled:  os.Getenv("SMTP_ENABLED") == "true",
 	}
 
 	// Apply sensible default for Port when not specified.

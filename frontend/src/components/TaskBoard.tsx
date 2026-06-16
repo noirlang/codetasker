@@ -8,20 +8,56 @@
  * List mode: flat file-grouped list sorted by file_path then line_number.
  *
  * Header contains: title, list/kanban toggle, and "Inject TODO" button.
+ *
+ * Extended with:
+ * - Assignee picker: each task card shows assignee avatar/username;
+ *   clicking opens a collaborator picker overlay.
+ * - Comments: task detail modal shows comments with add/delete.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   DragDropContext,
   Droppable,
   Draggable,
   type DropResult,
 } from '@hello-pangea/dnd';
-import { LayoutList, Columns, Plus, GitPullRequest } from 'lucide-react';
+import {
+  LayoutList,
+  Columns,
+  Plus,
+  GitPullRequest,
+  User,
+  X,
+  MessageSquare,
+  Send,
+  Trash2,
+  UserMinus,
+} from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
-import type { Task, TaskStatus, PullRequest } from '../types';
+import { tasksApi, commentsApi, reposApi } from '../api/client';
+import { useAuthStore } from '../store/authStore';
+import type { Task, TaskStatus, PullRequest, Collaborator, Comment } from '../types';
 import Badge from './ui/Badge';
 import Spinner from './ui/Spinner';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Format an ISO timestamp as a relative time string */
+function timeAgo(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (seconds < 60) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +65,7 @@ interface TaskBoardProps {
   repoId: number;
   repoOwner: string;
   repoName: string;
-  /** Called when user clicks \"Inject TODO\" — optionally passes a pre-filled line */
+  /** Called when user clicks "Inject TODO" — optionally passes a pre-filled line */
   onInjectClick: (lineNumber?: number) => void;
   /** Called when user clicks a task card to jump to the code */
   onTaskClick?: (filePath: string, lineNumber: number) => void;
@@ -54,6 +90,276 @@ function getPrNumber(url?: string): string | null {
   return match ? `#${match[1]}` : 'PR';
 }
 
+// ── Task Detail Modal (comments + assignee) ───────────────────────────────────
+
+function TaskDetailModal({
+  task,
+  collaborators,
+  currentUsername,
+  onClose,
+  onAssign,
+}: {
+  task: Task;
+  collaborators: Collaborator[];
+  currentUsername: string;
+  onClose: () => void;
+  onAssign: (taskId: string, username: string | null) => Promise<void>;
+}) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [newComment, setNewComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+
+  // Local assignee state (for optimistic UI)
+  const [localAssignee, setLocalAssignee] = useState<string | null>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (task as any).assignee_username ?? null
+  );
+
+  // Load comments on mount
+  useEffect(() => {
+    setCommentsLoading(true);
+    commentsApi
+      .list(task.id)
+      .then(setComments)
+      .catch(() => setComments([]))
+      .finally(() => setCommentsLoading(false));
+  }, [task.id]);
+
+  const handleAddComment = async () => {
+    const trimmed = newComment.trim();
+    if (!trimmed || submitting) return;
+    setSubmitting(true);
+    try {
+      const comment = await commentsApi.add(task.id, trimmed);
+      setComments((prev) => [...prev, comment]);
+      setNewComment('');
+    } catch {
+      // Silently fail
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    setComments((prev) => prev.filter((c) => c.id !== commentId));
+    try {
+      await commentsApi.delete(task.id, commentId);
+    } catch {
+      // Refetch on failure
+      commentsApi.list(task.id).then(setComments).catch(() => {});
+    }
+  };
+
+  const handleAssign = async (username: string | null) => {
+    setAssigning(true);
+    setLocalAssignee(username);
+    setShowAssigneePicker(false);
+    try {
+      await onAssign(task.id, username);
+    } catch {
+      setLocalAssignee(null);
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const displayPath = task.file_path.split('/').slice(-2).join('/');
+  const shortSha = task.commit_sha.slice(0, 7);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="relative flex flex-col w-full max-w-lg max-h-[85vh] rounded border border-[#222222] bg-[#111111] shadow-2xl shadow-black/80 animate__animated animate__fadeInUp"
+        style={{ animationDuration: '0.2s' }}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-[#1a1a1a] px-5 py-4">
+          <div className="flex items-start gap-2 min-w-0">
+            <Badge type={task.type} />
+            <div className="min-w-0">
+              <p className="text-sm text-white font-medium leading-snug line-clamp-2">{task.content}</p>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="font-mono text-[10px] text-[#666666]">{displayPath}</span>
+                <span className="font-mono text-[10px] text-[#666666]">L{task.line_number}</span>
+                <span className="font-mono text-[10px] text-[#666666]">{shortSha}</span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 rounded p-1 text-[#666666] hover:text-white transition-colors cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Assignee section */}
+          <div className="border-b border-[#1a1a1a] px-5 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Assignee</span>
+              <button
+                onClick={() => setShowAssigneePicker((v) => !v)}
+                className="text-[9px] text-[#666666] hover:text-white border border-[#2a2a2a] hover:border-[#3a3a3a] px-1.5 py-0.5 rounded transition-all cursor-pointer font-mono"
+                disabled={assigning}
+              >
+                {assigning ? 'Assigning…' : 'Change'}
+              </button>
+            </div>
+
+            {/* Current assignee */}
+            <div className="mt-2 flex items-center gap-2">
+              {localAssignee ? (
+                <>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#2a2a2a] border border-[#3a3a3a] shrink-0">
+                    <User size={11} className="text-[#a0a0a0]" />
+                  </div>
+                  <span className="text-[11px] text-white font-medium">{localAssignee}</span>
+                </>
+              ) : (
+                <>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a] shrink-0">
+                    <User size={11} className="text-[#444444]" />
+                  </div>
+                  <span className="text-[11px] text-[#666666] italic">Unassigned</span>
+                </>
+              )}
+            </div>
+
+            {/* Assignee picker dropdown */}
+            {showAssigneePicker && (
+              <div className="mt-2 rounded border border-[#222222] bg-[#0d0d0d] overflow-hidden">
+                {localAssignee && (
+                  <button
+                    onClick={() => handleAssign(null)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-[#a0a0a0] hover:bg-[#161616] transition-colors cursor-pointer border-b border-[#1a1a1a]"
+                  >
+                    <UserMinus size={12} className="text-[#666666]" />
+                    Clear assignee
+                  </button>
+                )}
+                {collaborators.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => handleAssign(c.username)}
+                    className={[
+                      'flex w-full items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer',
+                      localAssignee === c.username
+                        ? 'bg-white/[0.04] text-white'
+                        : 'text-[#a0a0a0] hover:bg-[#161616]',
+                    ].join(' ')}
+                  >
+                    <img
+                      src={c.avatar_url}
+                      alt={c.username}
+                      className="h-5 w-5 rounded-full border border-[#2a2a2a] shrink-0"
+                    />
+                    <span className="text-[11px] truncate">{c.username}</span>
+                    <span className="ml-auto text-[9px] font-mono text-[#666666] capitalize">{c.role}</span>
+                  </button>
+                ))}
+                {collaborators.length === 0 && (
+                  <p className="px-3 py-3 text-[10px] text-[#666666]">No collaborators found</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Comments section */}
+          <div className="px-5 py-4">
+            <div className="flex items-center gap-2 mb-3">
+              <MessageSquare size={12} className="text-[#666666]" />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Comments</span>
+              <span className="rounded border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[9px] text-[#666666]">
+                {comments.length}
+              </span>
+            </div>
+
+            {commentsLoading ? (
+              <div className="flex justify-center py-4">
+                <Spinner size={18} />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {comments.length === 0 && (
+                  <p className="text-[11px] text-[#666666] py-2 text-center">No comments yet</p>
+                )}
+                {comments.map((comment) => (
+                  <div
+                    key={comment.id}
+                    className="rounded border border-[#1a1a1a] bg-[#0d0d0d] p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        {comment.avatar_url ? (
+                          <img
+                            src={comment.avatar_url}
+                            alt={comment.username}
+                            className="h-5 w-5 rounded-full border border-[#2a2a2a] shrink-0"
+                          />
+                        ) : (
+                          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#2a2a2a]">
+                            <User size={10} className="text-[#666666]" />
+                          </div>
+                        )}
+                        <span className="text-[11px] font-medium text-white">{comment.username}</span>
+                        <span className="text-[9px] text-[#666666] font-mono">{timeAgo(comment.created_at)}</span>
+                      </div>
+                      {comment.username === currentUsername && (
+                        <button
+                          onClick={() => handleDeleteComment(comment.id)}
+                          className="text-[#444444] hover:text-red-400 transition-colors cursor-pointer"
+                          title="Delete comment"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#a0a0a0] leading-4 whitespace-pre-wrap">{comment.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add comment */}
+            <div className="mt-3 flex flex-col gap-2">
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Add a comment…"
+                rows={2}
+                className="w-full resize-none rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-2 text-[11px] text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a] transition-colors"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    handleAddComment();
+                  }
+                }}
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim() || submitting}
+                  className="flex items-center gap-1.5 rounded border border-[#2a2a2a] bg-white/[0.04] px-3 py-1.5 text-[10px] font-mono text-[#a0a0a0] hover:text-white hover:border-[#3a3a3a] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {submitting ? <Spinner size={11} /> : <Send size={10} />}
+                  Comment
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Task Card ────────────────────────────────────────────────────────────────
 
 function TaskCard({
@@ -63,6 +369,7 @@ function TaskCard({
   onTaskClick,
   pulls,
   onLinkTaskToPR,
+  onOpenDetail,
 }: {
   task: Task;
   index: number;
@@ -70,10 +377,13 @@ function TaskCard({
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
+  onOpenDetail: (task: Task) => void;
 }) {
   const [showLinkSelect, setShowLinkSelect] = useState(false);
   const displayPath = task.file_path.split('/').slice(-2).join('/');
   const shortSha    = task.commit_sha.slice(0, 7);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const assigneeUsername: string | null = (task as any).assignee_username ?? null;
 
   return (
     <Draggable draggableId={task.id} index={index}>
@@ -116,6 +426,20 @@ function TaskCard({
           <p className="line-clamp-3 text-xs text-[#a0a0a0]">
             {task.content}
           </p>
+
+          {/* Assignee row */}
+          <div
+            className="flex items-center gap-1.5"
+            onClick={(e) => { e.stopPropagation(); onOpenDetail(task); }}
+            title="Click to manage assignee & comments"
+          >
+            <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a] shrink-0">
+              <User size={9} className={assigneeUsername ? 'text-[#a0a0a0]' : 'text-[#444444]'} />
+            </div>
+            <span className={`text-[9px] font-mono truncate ${assigneeUsername ? 'text-[#a0a0a0]' : 'text-[#444444] italic'}`}>
+              {assigneeUsername ?? 'Unassigned'}
+            </span>
+          </div>
 
           {/* Footer: commit SHA + PR Link */}
           <div className="border-t border-[#2a2a2a] pt-2 flex items-center justify-between">
@@ -187,6 +511,7 @@ function KanbanColumn({
   onTaskClick,
   pulls,
   onLinkTaskToPR,
+  onOpenDetail,
 }: {
   columnId: TaskStatus;
   label: string;
@@ -195,6 +520,7 @@ function KanbanColumn({
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
+  onOpenDetail: (task: Task) => void;
 }) {
   return (
     <div className="flex min-w-[220px] flex-1 flex-col gap-3">
@@ -228,6 +554,7 @@ function KanbanColumn({
                 onTaskClick={onTaskClick}
                 pulls={pulls}
                 onLinkTaskToPR={onLinkTaskToPR}
+                onOpenDetail={onOpenDetail}
               />
             ))}
             {provided.placeholder}
@@ -253,15 +580,19 @@ function TaskListItem({
   onTaskClick,
   pulls,
   onLinkTaskToPR,
+  onOpenDetail,
 }: {
   task: Task;
   onInjectClick: (lineNumber?: number) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
+  onOpenDetail: (task: Task) => void;
 }) {
   const [showLinkSelect, setShowLinkSelect] = useState(false);
   const shortSha = task.commit_sha.slice(0, 7);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const assigneeUsername: string | null = (task as any).assignee_username ?? null;
 
   return (
     <div
@@ -283,6 +614,18 @@ function TaskListItem({
       </div>
 
       <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+        {/* Assignee chip */}
+        <button
+          onClick={() => onOpenDetail(task)}
+          className="flex items-center gap-1 text-[9px] font-mono border border-[#1a1a1a] hover:border-[#2a2a2a] rounded px-1.5 py-0.5 transition-all cursor-pointer"
+          title="Manage assignee & comments"
+        >
+          <User size={9} className={assigneeUsername ? 'text-[#a0a0a0]' : 'text-[#444444]'} />
+          <span className={assigneeUsername ? 'text-[#a0a0a0]' : 'text-[#444444] italic'}>
+            {assigneeUsername ?? 'None'}
+          </span>
+        </button>
+
         {/* PR Linkage */}
         {task.pr_url ? (
           <a
@@ -345,12 +688,14 @@ function ListView({
   onTaskClick,
   pulls,
   onLinkTaskToPR,
+  onOpenDetail,
 }: {
   tasks: Task[];
   onInjectClick: (lineNumber?: number) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
+  onOpenDetail: (task: Task) => void;
 }) {
   // Group tasks by file_path, sorted by file then line number
   const sorted = [...tasks].sort((a, b) => {
@@ -390,6 +735,7 @@ function ListView({
               onTaskClick={onTaskClick}
               pulls={pulls}
               onLinkTaskToPR={onLinkTaskToPR}
+              onOpenDetail={onOpenDetail}
             />
           ))}
         </div>
@@ -408,8 +754,8 @@ function ListView({
 
 export default function TaskBoard({
   repoId,
-  repoOwner: _repoOwner,
-  repoName: _repoName,
+  repoOwner,
+  repoName,
   onInjectClick,
   onTaskClick,
   pulls,
@@ -418,7 +764,23 @@ export default function TaskBoard({
   const { tasks, isLoading, error, fetchTasks, updateTaskStatus } =
     useTaskStore();
 
+  const currentUser = useAuthStore((s) => s.user);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+
+  // Collaborators for assignee picker
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+
+  // Task detail modal state
+  const [detailTask, setDetailTask] = useState<Task | null>(null);
+
+  // Fetch collaborators for assignee picker
+  useEffect(() => {
+    if (!repoOwner || !repoName) return;
+    reposApi
+      .listCollaborators(repoOwner, repoName)
+      .then((list) => setCollaborators(list || []))
+      .catch(() => {});
+  }, [repoOwner, repoName]);
 
   // Fetch tasks when repoId changes
   useEffect(() => {
@@ -442,6 +804,20 @@ export default function TaskBoard({
     const newStatus = destination.droppableId as TaskStatus;
     updateTaskStatus(draggableId, newStatus);
   };
+
+  // ── Assign handler ───────────────────────────────────────────────────────
+
+  const handleAssign = useCallback(async (taskId: string, username: string | null) => {
+    try {
+      if (username) {
+        await tasksApi.updateTask(taskId, { assignee_username: username });
+      } else {
+        await tasksApi.updateTask(taskId, { clear_assignee: true });
+      }
+    } catch {
+      // Silently fail
+    }
+  }, []);
 
   // ── Partition tasks into columns ────────────────────────────────────────
 
@@ -473,84 +849,98 @@ export default function TaskBoard({
   }
 
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: '100%' }}>
-      {/* Board header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-[#2a2a2a] px-4 py-3">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-white">Tasks</span>
-          <span className="rounded border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#666666]">
-            {tasks.length}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* View toggle */}
-          <div className="flex rounded border border-[#2a2a2a]">
-            <button
-              className={`flex items-center gap-1 px-2 py-1 text-[10px] transition-colors duration-150 ${
-                viewMode === 'list'
-                  ? 'bg-[#1a1a1a] text-white'
-                  : 'text-[#666666] hover:text-white'
-              }`}
-              onClick={() => setViewMode('list')}
-              title="List view"
-            >
-              <LayoutList size={12} />
-            </button>
-            <button
-              className={`flex items-center gap-1 px-2 py-1 text-[10px] transition-colors duration-150 ${
-                viewMode === 'kanban'
-                  ? 'bg-[#1a1a1a] text-white'
-                  : 'text-[#666666] hover:text-white'
-              }`}
-              onClick={() => setViewMode('kanban')}
-              title="Kanban view"
-            >
-              <Columns size={12} />
-            </button>
+    <>
+      <div className="flex flex-col overflow-hidden" style={{ height: '100%' }}>
+        {/* Board header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-[#2a2a2a] px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium text-white">Tasks</span>
+            <span className="rounded border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#666666]">
+              {tasks.length}
+            </span>
           </div>
 
-          {/* Inject TODO */}
-          <button
-            className="btn-secondary flex items-center gap-1 px-2 py-1 text-[10px]"
-            onClick={() => onInjectClick()}
-          >
-            <Plus size={11} />
-            Inject TODO
-          </button>
+          <div className="flex items-center gap-2">
+            {/* View toggle */}
+            <div className="flex rounded border border-[#2a2a2a]">
+              <button
+                className={`flex items-center gap-1 px-2 py-1 text-[10px] transition-colors duration-150 ${
+                  viewMode === 'list'
+                    ? 'bg-[#1a1a1a] text-white'
+                    : 'text-[#666666] hover:text-white'
+                }`}
+                onClick={() => setViewMode('list')}
+                title="List view"
+              >
+                <LayoutList size={12} />
+              </button>
+              <button
+                className={`flex items-center gap-1 px-2 py-1 text-[10px] transition-colors duration-150 ${
+                  viewMode === 'kanban'
+                    ? 'bg-[#1a1a1a] text-white'
+                    : 'text-[#666666] hover:text-white'
+                }`}
+                onClick={() => setViewMode('kanban')}
+                title="Kanban view"
+              >
+                <Columns size={12} />
+              </button>
+            </div>
+
+            {/* Inject TODO */}
+            <button
+              className="btn-secondary flex items-center gap-1 px-2 py-1 text-[10px]"
+              onClick={() => onInjectClick()}
+            >
+              <Plus size={11} />
+              Inject TODO
+            </button>
+          </div>
+        </div>
+
+        {/* Board body */}
+        <div className="flex-1 overflow-auto p-4">
+          {viewMode === 'kanban' ? (
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
+                {COLUMNS.map((col) => (
+                  <KanbanColumn
+                    key={col.id}
+                    columnId={col.id}
+                    label={col.label}
+                    tasks={byStatus(col.id)}
+                    onInjectClick={onInjectClick}
+                    onTaskClick={onTaskClick}
+                    pulls={pulls}
+                    onLinkTaskToPR={onLinkTaskToPR}
+                    onOpenDetail={setDetailTask}
+                  />
+                ))}
+              </div>
+            </DragDropContext>
+          ) : (
+            <ListView
+              tasks={tasks}
+              onInjectClick={onInjectClick}
+              onTaskClick={onTaskClick}
+              pulls={pulls}
+              onLinkTaskToPR={onLinkTaskToPR}
+              onOpenDetail={setDetailTask}
+            />
+          )}
         </div>
       </div>
 
-      {/* Board body */}
-      <div className="flex-1 overflow-auto p-4">
-        {viewMode === 'kanban' ? (
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
-              {COLUMNS.map((col) => (
-                <KanbanColumn
-                  key={col.id}
-                  columnId={col.id}
-                  label={col.label}
-                  tasks={byStatus(col.id)}
-                  onInjectClick={onInjectClick}
-                  onTaskClick={onTaskClick}
-                  pulls={pulls}
-                  onLinkTaskToPR={onLinkTaskToPR}
-                />
-              ))}
-            </div>
-          </DragDropContext>
-        ) : (
-          <ListView
-            tasks={tasks}
-            onInjectClick={onInjectClick}
-            onTaskClick={onTaskClick}
-            pulls={pulls}
-            onLinkTaskToPR={onLinkTaskToPR}
-          />
-        )}
-      </div>
-    </div>
+      {/* Task detail modal (assignee + comments) */}
+      {detailTask && (
+        <TaskDetailModal
+          task={detailTask}
+          collaborators={collaborators}
+          currentUsername={currentUser?.username ?? ''}
+          onClose={() => setDetailTask(null)}
+          onAssign={handleAssign}
+        />
+      )}
+    </>
   );
 }
-

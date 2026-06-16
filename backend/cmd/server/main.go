@@ -78,18 +78,23 @@ func main() {
 	taskRepo := repository.NewTaskRepository(db)
 	syncedRepo := repository.NewSyncedRepository(db)
 	collaboratorRepo := repository.NewCollaboratorRepository(db)
+	commentRepo := repository.NewCommentRepository(db)
+	notifRepo := repository.NewNotificationRepository(db)
+	activityRepo := repository.NewActivityRepository(db)
 
 	// Services
 	authService := service.NewAuthService(cfg, userRepo, log)
 	githubService := service.NewGithubService(cfg, userRepo, log)
+	emailService := service.NewEmailService(cfg, log)
 	todoParser := parser.NewParser()
 	taskService := service.NewTaskService(taskRepo, userRepo, todoParser, githubService, log)
 
 	// Controllers
 	authCtrl := controller.NewAuthController(authService)
-	repoCtrl := controller.NewRepoController(cfg, githubService, taskService, syncedRepo, collaboratorRepo, userRepo)
+	repoCtrl := controller.NewRepoController(cfg, githubService, taskService, syncedRepo, collaboratorRepo, userRepo, activityRepo, taskRepo)
 	webhookCtrl := controller.NewWebhookController(taskService)
-	taskCtrl := controller.NewTaskController(taskService, githubService, syncedRepo, collaboratorRepo)
+	taskCtrl := controller.NewTaskController(taskService, githubService, syncedRepo, collaboratorRepo, commentRepo, notifRepo, activityRepo, userRepo, emailService, taskRepo)
+	notifCtrl := controller.NewNotificationController(notifRepo)
 
 	// ── Step 6: Configure Fiber ──────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
@@ -162,6 +167,7 @@ func main() {
 	authCtrl.RegisterProtectedRoutes(protected)
 	repoCtrl.RegisterRoutes(protected)
 	taskCtrl.RegisterRoutes(protected)
+	notifCtrl.RegisterRoutes(protected)
 
 	// ── Step 8: Start server ─────────────────────────────────────────────────
 	// We start the server in a background goroutine so the main goroutine can
