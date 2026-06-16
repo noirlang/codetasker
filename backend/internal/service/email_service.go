@@ -154,6 +154,12 @@ const emailHTMLTemplate = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CodeTasker Notification</title>
   <style>
+    @font-face {
+      font-family: 'Camiro';
+      src: url('{{ACTION_URL}}/fonts/Camiro.ttf') format('truetype');
+      font-weight: bold;
+      font-style: normal;
+    }
     body {
       background-color: #fafafa;
       color: #24292f;
@@ -185,7 +191,7 @@ const emailHTMLTemplate = `<!DOCTYPE html>
     }
     .logo-text {
       color: #000000;
-      font-family: serif;
+      font-family: 'Camiro', Georgia, serif;
       font-size: 16px;
       font-weight: bold;
       letter-spacing: 0.15em;

@@ -356,7 +356,13 @@ func (s *TaskService) ProcessWebhook(...) {
       <section className="relative z-10 py-24">
         <div className="mx-auto max-w-7xl px-6">
           <div className="mb-20 text-center">
-            <h2 className="text-3xl font-extrabold text-white">How CodeTasker works</h2>
+            <h2 className="text-3xl font-extrabold text-white">
+              How{' '}
+              <span style={{ fontFamily: "'Camiro', serif", letterSpacing: '0.05em' }} className="font-semibold">
+                CodeTasker
+              </span>{' '}
+              works
+            </h2>
             <p className="mt-4 text-[#a0a0a0]">Syncing your codebase annotation in 3 simple steps</p>
           </div>
 
