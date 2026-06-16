@@ -4,8 +4,10 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/codetasker/backend/internal/config"
@@ -153,8 +155,10 @@ func (rc *RepoController) ListRepos(c *fiber.Ctx) error {
 		Topics          []string `json:"topics"`
 	}
 
+	includedSet := make(map[int64]bool)
 	response := make([]repoResponse, 0, len(repos))
 	for _, r := range repos {
+		repoID := r.GetID()
 		updatedAt := ""
 		if r.UpdatedAt != nil {
 			updatedAt = r.UpdatedAt.Format("2006-01-02T15:04:05Z")
@@ -171,7 +175,7 @@ func (rc *RepoController) ListRepos(c *fiber.Ctx) error {
 		}
 
 		response = append(response, repoResponse{
-			ID:              r.GetID(),
+			ID:              repoID,
 			Name:            r.GetName(),
 			FullName:        r.GetFullName(),
 			Description:     description,
@@ -180,9 +184,38 @@ func (rc *RepoController) ListRepos(c *fiber.Ctx) error {
 			Language:        language,
 			StargazersCount: r.GetStargazersCount(),
 			HTMLURL:         r.GetHTMLURL(),
-			IsSynced:        syncedSet[r.GetID()],
+			IsSynced:        syncedSet[repoID],
 			Topics:          r.Topics,
 		})
+		includedSet[repoID] = true
+	}
+
+	// Append collaborator repositories that are not in the user's personal GitHub list
+	for _, col := range collaborations {
+		if !includedSet[col.RepoID] {
+			synced, err := rc.syncedRepoRepo.FindByRepoIDOnly(c.Context(), col.RepoID)
+			if err == nil && synced != nil {
+				shortName := synced.RepoName
+				if slashIdx := strings.Index(synced.RepoName, "/"); slashIdx != -1 {
+					shortName = synced.RepoName[slashIdx+1:]
+				}
+
+				response = append(response, repoResponse{
+					ID:              synced.RepoID,
+					Name:            shortName,
+					FullName:        synced.RepoName,
+					Description:     "Collaborator repository",
+					Private:         true,
+					UpdatedAt:       synced.CreatedAt.Format("2006-01-02T15:04:05Z"),
+					Language:        "Go/JS/TS",
+					StargazersCount: 0,
+					HTMLURL:         fmt.Sprintf("https://github.com/%s", synced.RepoName),
+					IsSynced:        true,
+					Topics:          []string{"collaboration"},
+				})
+				includedSet[col.RepoID] = true
+			}
+		}
 	}
 
 	return c.JSON(fiber.Map{
@@ -208,7 +241,7 @@ func (rc *RepoController) GetTree(c *fiber.Ctx) error {
 	repo := c.Params("repo")
 	branch := c.Query("branch", "HEAD")
 
-	tree, err := rc.githubService.GetTree(c.Context(), userID, owner, repo, branch)
+	tree, err := rc.githubService.GetTree(c.Context(), rc.resolveTargetUserID(c.Context(), userID, owner, repo), owner, repo, branch)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "get_tree_failed",
@@ -269,7 +302,7 @@ func (rc *RepoController) GetContents(c *fiber.Ctx) error {
 		})
 	}
 
-	content, err := rc.githubService.GetContents(c.Context(), userID, owner, repo, path, ref)
+	content, err := rc.githubService.GetContents(c.Context(), rc.resolveTargetUserID(c.Context(), userID, owner, repo), owner, repo, path, ref)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "get_contents_failed",
@@ -1548,7 +1581,7 @@ func (rc *RepoController) ListIssues(c *fiber.Ctx) error {
 	repo := c.Params("repo")
 	state := c.Query("state", "open")
 
-	issues, err := rc.githubService.ListIssues(c.Context(), userID, owner, repo, state)
+	issues, err := rc.githubService.ListIssues(c.Context(), rc.resolveTargetUserID(c.Context(), userID, owner, repo), owner, repo, state)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "list_issues_failed",
@@ -1695,7 +1728,7 @@ func (rc *RepoController) ListBranches(c *fiber.Ctx) error {
 	owner := c.Params("owner")
 	repo := c.Params("repo")
 
-	branches, err := rc.githubService.ListBranches(c.Context(), userID, owner, repo)
+	branches, err := rc.githubService.ListBranches(c.Context(), rc.resolveTargetUserID(c.Context(), userID, owner, repo), owner, repo)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "list_branches_failed", "message": err.Error()})
 	}
@@ -1803,7 +1836,7 @@ func (rc *RepoController) GetCommitDiff(c *fiber.Ctx) error {
 	repo := c.Params("repo")
 	sha := c.Params("sha")
 
-	commit, err := rc.githubService.GetCommitDiff(c.Context(), userID, owner, repo, sha)
+	commit, err := rc.githubService.GetCommitDiff(c.Context(), rc.resolveTargetUserID(c.Context(), userID, owner, repo), owner, repo, sha)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "get_commit_diff_failed", "message": err.Error()})
 	}
@@ -1966,4 +1999,27 @@ func (rc *RepoController) GetActivity(c *fiber.Ctx) error {
 	_ = primitive.NilObjectID
 
 	return c.JSON(fiber.Map{"activities": activities, "count": len(activities)})
+}
+
+// resolveTargetUserID returns the UserID of the repository owner if the requester
+// is an authorized collaborator, allowing them to browse and interact using the
+// owner's token.
+func (rc *RepoController) resolveTargetUserID(ctx context.Context, userID primitive.ObjectID, owner, repo string) primitive.ObjectID {
+	if owner == "" || repo == "" {
+		return userID
+	}
+	repoFullName := fmt.Sprintf("%s/%s", owner, repo)
+	synced, err := rc.syncedRepoRepo.FindByRepoName(ctx, repoFullName)
+	if err != nil || synced == nil {
+		return userID
+	}
+	if synced.UserID == userID {
+		return userID
+	}
+	// Verify user is a collaborator
+	collab, err := rc.collaboratorRepo.FindByUserAndRepo(ctx, userID, synced.RepoID)
+	if err == nil && collab != nil {
+		return synced.UserID
+	}
+	return userID
 }
