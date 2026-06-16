@@ -253,16 +253,14 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 		})
 
 		// Send email notification (non-fatal if SMTP is not configured).
-		if assignee.Email != "" {
-			_ = tc.emailService.SendTaskAssigned(
-				assignee.Email,
-				assignee.Username,
-				actorName,
-				task.Content,
-				task.RepoName,
-				"",
-			)
-		}
+		_ = tc.emailService.SendTaskAssigned(
+			assignee.Email,
+			assignee.Username,
+			actorName,
+			task.Content,
+			task.RepoName,
+			"",
+		)
 	}
 
 	// ── Handle status / PR URL update (if provided) ────────────────────────────
@@ -484,8 +482,8 @@ func (tc *TaskController) AddComment(c *fiber.Ctx) error {
 			Link:    fmt.Sprintf("/repos/%s/tasks", task.RepoName),
 		})
 
-		// Send email notification to the assignee if they have an email address
-		if assignee, err := tc.userRepo.FindByObjectID(c.Context(), *task.AssigneeID); err == nil && assignee != nil && assignee.Email != "" {
+		// Send email notification to the assignee
+		if assignee, err := tc.userRepo.FindByObjectID(c.Context(), *task.AssigneeID); err == nil && assignee != nil {
 			_ = tc.emailService.SendCommentNotification(
 				assignee.Email,
 				assignee.Username,

@@ -24,9 +24,14 @@ func NewEmailService(cfg *config.Config, log *zap.Logger) *EmailService {
 }
 
 // SendTaskAssigned sends a "You've been assigned to a task" notification email.
-// It is a no-op when SMTPEnabled is false.
+// It is a no-op when SMTPEnabled is false or recipient email is empty.
 func (s *EmailService) SendTaskAssigned(toEmail, toName, assignerName, taskContent, repoName, frontendURL string) error {
 	if !s.cfg.SMTPEnabled {
+		s.log.Info("SMTP disabled, skipping SendTaskAssigned", zap.String("toName", toName))
+		return nil
+	}
+	if toEmail == "" {
+		s.log.Info("Recipient email is empty, skipping SendTaskAssigned", zap.String("toName", toName))
 		return nil
 	}
 	if frontendURL == "" {
@@ -49,11 +54,17 @@ CodeTasker — Task management for developers
 }
 
 // SendCommentNotification notifies a user that someone commented on their task.
-// It is a no-op when SMTPEnabled is false.
+// It is a no-op when SMTPEnabled is false or recipient email is empty.
 func (s *EmailService) SendCommentNotification(toEmail, toName, commenterName, taskContent, comment, repoName, frontendURL string) error {
 	if !s.cfg.SMTPEnabled {
+		s.log.Info("SMTP disabled, skipping SendCommentNotification", zap.String("toName", toName))
 		return nil
 	}
+	if toEmail == "" {
+		s.log.Info("Recipient email is empty, skipping SendCommentNotification", zap.String("toName", toName))
+		return nil
+	}
+
 	if frontendURL == "" {
 		frontendURL = s.cfg.FrontendURL
 	}
