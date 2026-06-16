@@ -1149,9 +1149,19 @@ func (rc *RepoController) AddCollaborator(c *fiber.Ctx) error {
 		})
 	}
 
+	// Check if the user is a collaborator on the actual GitHub repository
+	isGHCollab, err := rc.githubService.IsCollaborator(c.Context(), userID, owner, repo, body.Username)
+	var warning string
+	if err != nil {
+		fmt.Printf("[DEBUG] Failed to check GitHub collaborator status for user '%s': %v\n", body.Username, err)
+	} else if !isGHCollab {
+		warning = fmt.Sprintf("Note: '%s' is not listed as a collaborator on the GitHub repository. They will not be able to view tasks or push commits until you invite them on GitHub.", body.Username)
+	}
+
 	return c.JSON(fiber.Map{
 		"message":      "collaborator added successfully",
 		"collaborator": collab,
+		"warning":      warning,
 	})
 }
 

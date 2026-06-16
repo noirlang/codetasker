@@ -206,12 +206,12 @@ export const reposApi = {
     repo: string,
     username: string,
     role: RepoRole
-  ): Promise<Collaborator> => {
-    const { data } = await client.post<{ collaborator: Collaborator }>(
+  ): Promise<{ collaborator: Collaborator; warning?: string }> => {
+    const { data } = await client.post<{ collaborator: Collaborator; warning?: string }>(
       `/repos/${owner}/${repo}/collaborators`,
       { username, role }
     );
-    return data.collaborator;
+    return data;
   },
 
   /**

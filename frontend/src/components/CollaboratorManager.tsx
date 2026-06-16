@@ -25,6 +25,7 @@ export default function CollaboratorManager({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   // Form state
   const [username, setUsername] = useState('');
@@ -52,6 +53,7 @@ export default function CollaboratorManager({
       setUsername('');
       setRole('developer');
       setError(null);
+      setWarning(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, repoOwner, repoName]);
@@ -72,10 +74,14 @@ export default function CollaboratorManager({
 
     setSubmitting(true);
     setError(null);
+    setWarning(null);
     try {
-      const newCollab = await reposApi.addCollaborator(repoOwner, repoName, username.trim(), role);
-      setCollaborators((prev) => [...prev, newCollab]);
+      const { collaborator, warning: warnMsg } = await reposApi.addCollaborator(repoOwner, repoName, username.trim(), role);
+      setCollaborators((prev) => [...prev, collaborator]);
       setUsername('');
+      if (warnMsg) {
+        setWarning(warnMsg);
+      }
       if (onRefresh) onRefresh();
     } catch (err) {
       const apiErr = err as ApiError;
@@ -146,6 +152,12 @@ export default function CollaboratorManager({
           {error && (
             <div className="text-xs text-red-400 bg-red-400/5 border border-red-400/10 px-3 py-2 rounded">
               {error}
+            </div>
+          )}
+
+          {warning && (
+            <div className="text-xs text-amber-400 bg-amber-400/5 border border-amber-400/10 px-3 py-2 rounded leading-relaxed">
+              {warning}
             </div>
           )}
 

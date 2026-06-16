@@ -1141,3 +1141,30 @@ func (s *GithubService) GetCommitDiff(ctx context.Context, userID primitive.Obje
 	}
 	return commit, nil
 }
+
+// IsCollaborator checks if a user is a collaborator on a given GitHub repository.
+func (s *GithubService) IsCollaborator(ctx context.Context, userID primitive.ObjectID, owner, repo, username string) (bool, error) {
+	if err := validateName(owner, "owner"); err != nil {
+		return false, err
+	}
+	if err := validateName(repo, "repo"); err != nil {
+		return false, err
+	}
+	if !safeNamePattern.MatchString(username) {
+		return false, fmt.Errorf("invalid username parameter (SSRF prevention)")
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("IsCollaborator resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	isCollab, _, err := client.Repositories.IsCollaborator(ctx, owner, repo, username)
+	if err != nil {
+		return false, fmt.Errorf("GitHub Repositories.IsCollaborator failed: %w", err)
+	}
+
+	return isCollab, nil
+}
+

@@ -24,6 +24,8 @@ import {
   Github,
   ShieldCheck,
   Mail,
+  AlertTriangle,
+  Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ScrollReveal from 'scrollreveal';
@@ -294,6 +296,36 @@ function DocsContent() {
               <p className="text-xs leading-5 text-[#a0a0a0]">{step}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="rounded border border-[#2a2a2a] bg-[#111111] p-5 lg:col-span-2">
+        <div className="mb-4 flex items-center gap-2">
+          <Users size={15} className="text-[#a0a0a0]" />
+          <h2 className="text-sm font-semibold text-white">Collaborator Access & Push Permissions</h2>
+        </div>
+        <p className="text-xs leading-6 text-[#a0a0a0] mb-3">
+          To collaborate on CodeTasker boards, users must first be added as collaborators on the corresponding **GitHub repository** itself.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded border border-[#242424] bg-[#0d0d0d] p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-amber-400">
+              <AlertTriangle size={11} />
+              GitHub Invitation Required
+            </div>
+            <p className="text-xs leading-5 text-[#a0a0a0]">
+              If a user is not added as a collaborator on GitHub, they will not be able to view the repository, see tasks, or push commits to the branch. Always invite them on GitHub first.
+            </p>
+          </div>
+          <div className="rounded border border-[#242424] bg-[#0d0d0d] p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-emerald-400">
+              <CheckCircle2 size={11} />
+              CodeTasker Roles
+            </div>
+            <p className="text-xs leading-5 text-[#a0a0a0]">
+              After adding them on GitHub, map their roles (Viewer, Developer, Maintainer) inside CodeTasker to align team management and access privileges.
+            </p>
+          </div>
         </div>
       </section>
     </div>
