@@ -58,10 +58,10 @@ export default function App() {
         <div className="flex flex-col items-center gap-4">
           <Spinner size={36} />
           <span
-            className="font-mono text-xs text-[#666666]"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            className="text-sm tracking-[0.2em] text-white/90 select-none font-medium"
+            style={{ fontFamily: "'Camiro', serif" }}
           >
-            { '{ CodeTasker }' }
+            &lt;/ CODETASKER &gt;
           </span>
         </div>
       </div>

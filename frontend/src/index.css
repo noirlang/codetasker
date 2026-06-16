@@ -3,6 +3,13 @@
    Tailwind base → components → utilities
    ============================================================ */
 
+@font-face {
+  font-family: 'Camiro';
+  src: url('/fonts/Camiro.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
