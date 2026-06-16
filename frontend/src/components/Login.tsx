@@ -126,7 +126,7 @@ export default function Login() {
       {/* ── Section 1: Hero Section ─────────────────────────────────────────── */}
       <header className="relative z-10 mx-auto flex max-w-7xl flex-col items-center justify-between px-6 py-8 md:flex-row">
         <div className="flex items-center gap-2 select-none animate__animated animate__fadeIn">
-          <img src="/logo.png" alt="CodeTasker" className="h-8 w-auto object-contain" />
+          <img src="/logo.png" alt="CodeTasker" className="h-10 w-auto object-contain" />
         </div>
         <div className="mt-4 flex gap-4 md:mt-0 animate__animated animate__fadeIn">
           <a

@@ -418,6 +418,13 @@ function SettingsContent({
           ))}
         </div>
       </DashboardInfoCard>
+
+      <DashboardInfoCard icon={ShieldCheck} title="Enterprise Integration">
+        <div className="flex flex-col items-center justify-center p-6 border border-[#242424] bg-[#0d0d0d] rounded h-full min-h-[120px]">
+          <img src="/sirket.png" alt="Company Logo" className="h-16 w-auto object-contain opacity-90 transition-opacity hover:opacity-100" />
+          <p className="mt-3 text-[10px] font-mono text-[#666666] tracking-wider uppercase">Authorized Partner Node</p>
+        </div>
+      </DashboardInfoCard>
     </div>
   );
 }
@@ -612,7 +619,7 @@ export default function Dashboard() {
         <div className="flex flex-col gap-8">
           {/* Logo */}
           <div className="flex items-center gap-2 px-6 select-none">
-            <img src="/logo.png" alt="CodeTasker" className="h-7 w-auto object-contain" />
+            <img src="/logo.png" alt="CodeTasker" className="h-8 max-w-[170px] w-auto object-contain" />
           </div>
 
           {/* Navigation */}
@@ -694,7 +701,7 @@ export default function Dashboard() {
       {/* ── Mobile Header ─────────────────────────────────────────────────── */}
       <header className="flex md:hidden h-14 shrink-0 items-center justify-between border-b border-[#2a2a2a] bg-[#111111] px-4 w-full">
         <div className="flex items-center gap-2 select-none">
-          <img src="/logo-kucuk.png" alt="CodeTasker" className="h-6 w-auto object-contain" />
+          <img src="/logo-kucuk.png" alt="CodeTasker" className="h-9 w-auto object-contain" />
         </div>
         {user && (
           <div className="flex items-center gap-3">
