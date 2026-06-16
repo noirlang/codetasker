@@ -57,6 +57,9 @@ export interface Task {
   status: TaskStatus;
   commit_sha: string;          // SHA of the commit that introduced the comment
   pr_url?: string;             // linked PR url
+  assignee_id?: string;
+  assignee_username?: string;
+  assignee_avatar_url?: string;
   created_at: string;
   updated_at: string;
 }

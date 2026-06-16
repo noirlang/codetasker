@@ -35,7 +35,7 @@ import {
   UserMinus,
 } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
-import { tasksApi, commentsApi, reposApi } from '../api/client';
+import { commentsApi, reposApi } from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import type { Task, TaskStatus, PullRequest, Collaborator, Comment } from '../types';
 import Badge from './ui/Badge';
@@ -761,7 +761,7 @@ export default function TaskBoard({
   pulls,
   onLinkTaskToPR,
 }: TaskBoardProps) {
-  const { tasks, isLoading, error, fetchTasks, updateTaskStatus } =
+  const { tasks, isLoading, error, fetchTasks, updateTaskStatus, updateTaskAssignee } =
     useTaskStore();
 
   const currentUser = useAuthStore((s) => s.user);
@@ -809,15 +809,11 @@ export default function TaskBoard({
 
   const handleAssign = useCallback(async (taskId: string, username: string | null) => {
     try {
-      if (username) {
-        await tasksApi.updateTask(taskId, { assignee_username: username });
-      } else {
-        await tasksApi.updateTask(taskId, { clear_assignee: true });
-      }
+      await updateTaskAssignee(taskId, username);
     } catch {
       // Silently fail
     }
-  }, []);
+  }, [updateTaskAssignee]);
 
   // ── Partition tasks into columns ────────────────────────────────────────
 
@@ -934,7 +930,7 @@ export default function TaskBoard({
       {/* Task detail modal (assignee + comments) */}
       {detailTask && (
         <TaskDetailModal
-          task={detailTask}
+          task={tasks.find((t) => t.id === detailTask.id) || detailTask}
           collaborators={collaborators}
           currentUsername={currentUser?.username ?? ''}
           onClose={() => setDetailTask(null)}

@@ -47,6 +47,11 @@ interface TaskState {
   linkTaskToPR: (id: string, prUrl: string) => Promise<void>;
 
   /**
+   * Update a task's assignee in the backend and local store.
+   */
+  updateTaskAssignee: (id: string, username: string | null) => Promise<void>;
+
+  /**
    * Immediately update a task's status in the local store (no API call).
    * Used internally for optimistic updates; also exposed for testing.
    */
@@ -138,6 +143,42 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   injectTask: async (req: InjectTaskRequest): Promise<string> => {
     const { pr_url } = await tasksApi.inject(req);
     return pr_url;
+  },
+
+  updateTaskAssignee: async (id: string, username: string | null) => {
+    const previousTasks = get().tasks;
+
+    // Optimistically update locally
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              assignee_username: username || '',
+              updated_at: new Date().toISOString(),
+            }
+          : t
+      ),
+    }));
+
+    try {
+      let updated: Task;
+      if (username) {
+        updated = await tasksApi.updateTask(id, { assignee_username: username });
+      } else {
+        updated = await tasksApi.updateTask(id, { clear_assignee: true });
+      }
+      set((state) => ({
+        tasks: state.tasks.map((t) => (t.id === updated.id ? updated : t)),
+      }));
+    } catch (err) {
+      // Revert on failure
+      set({ tasks: previousTasks });
+
+      const apiErr = err as ApiError;
+      set({ error: apiErr.message ?? 'Failed to update task assignee.' });
+      throw err;
+    }
   },
 
   // ── Optimistic helper ────────────────────────────────────────────────────
