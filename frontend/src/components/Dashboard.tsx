@@ -611,14 +611,8 @@ export default function Dashboard() {
       <aside className="panel hidden md:flex w-64 shrink-0 flex-col justify-between border-r border-[#2a2a2a] bg-[#111111] h-screen py-6">
         <div className="flex flex-col gap-8">
           {/* Logo */}
-          <div className="flex items-center gap-2 px-6">
-            <span
-              className="font-mono text-base font-bold text-white select-none"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              {'{ CodeTasker }'}
-            </span>
-            <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+          <div className="flex items-center gap-2 px-6 select-none">
+            <img src="/logo.png" alt="CodeTasker" className="h-7 w-auto object-contain" />
           </div>
 
           {/* Navigation */}
@@ -699,11 +693,8 @@ export default function Dashboard() {
 
       {/* ── Mobile Header ─────────────────────────────────────────────────── */}
       <header className="flex md:hidden h-14 shrink-0 items-center justify-between border-b border-[#2a2a2a] bg-[#111111] px-4 w-full">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-sm font-bold text-white select-none">
-            {'{ CodeTasker }'}
-          </span>
-          <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+        <div className="flex items-center gap-2 select-none">
+          <img src="/logo-kucuk.png" alt="CodeTasker" className="h-6 w-auto object-contain" />
         </div>
         {user && (
           <div className="flex items-center gap-3">

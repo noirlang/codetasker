@@ -125,8 +125,8 @@ export default function Login() {
 
       {/* ── Section 1: Hero Section ─────────────────────────────────────────── */}
       <header className="relative z-10 mx-auto flex max-w-7xl flex-col items-center justify-between px-6 py-8 md:flex-row">
-        <div className="font-mono text-xl font-bold tracking-tight text-white select-none animate__animated animate__fadeIn">
-          {'{ CodeTasker }'}
+        <div className="flex items-center gap-2 select-none animate__animated animate__fadeIn">
+          <img src="/logo.png" alt="CodeTasker" className="h-8 w-auto object-contain" />
         </div>
         <div className="mt-4 flex gap-4 md:mt-0 animate__animated animate__fadeIn">
           <a
@@ -234,6 +234,18 @@ func (s *TaskService) ProcessWebhook(...) {
           </TiltCard>
         </div>
       </main>
+
+      {/* ── Partner Section ────────────────────────────────────────────────── */}
+      <section className="relative z-10 py-8 border-t border-[#2a2a2a]/40 bg-[#0d0d0d]">
+        <div className="mx-auto max-w-7xl px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <p className="text-xs font-mono text-[#666666] tracking-wider uppercase">
+            Enterprise Partner
+          </p>
+          <div className="flex items-center gap-4 opacity-50 hover:opacity-80 transition-opacity duration-200">
+            <img src="/sirket.png" alt="Partner Logo" className="h-10 w-auto object-contain" />
+          </div>
+        </div>
+      </section>
 
       {/* ── Section 2: Swiper 3D Feature Slider ─────────────────────────────── */}
       <section className="relative z-10 border-y border-[#2a2a2a] bg-[#111111]/30 py-24 backdrop-blur-md">
