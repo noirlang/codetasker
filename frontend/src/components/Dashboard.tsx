@@ -23,6 +23,7 @@ import {
   GitPullRequest,
   Github,
   ShieldCheck,
+  Mail,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ScrollReveal from 'scrollreveal';
@@ -310,6 +311,32 @@ function SettingsContent({
 }) {
   const syncedCount = repos.filter((repo) => repo.is_synced).length;
   const privateCount = repos.filter((repo) => repo.private).length;
+  const { updateEmail } = useAuthStore();
+
+  const [email, setEmail] = useState(user?.email || '');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Sync internal state when user profile is loaded/updated
+  useEffect(() => {
+    if (user?.email) {
+      setEmail(user.email);
+    }
+  }, [user?.email]);
+
+  const handleSaveEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      await updateEmail(email);
+      setMessage({ type: 'success', text: 'Email settings saved successfully.' });
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to save email settings.' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
@@ -329,6 +356,36 @@ function SettingsContent({
         ) : (
           <p className="text-sm text-[#a0a0a0]">No authenticated user loaded.</p>
         )}
+      </DashboardInfoCard>
+
+      <DashboardInfoCard icon={Mail} title="Email notifications">
+        <form onSubmit={handleSaveEmail} className="flex flex-col gap-3">
+          <p className="text-xs text-[#a0a0a0] leading-relaxed">
+            Enter your email address to receive notifications when you are assigned to a task or when someone comments on your tasks.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="e.g. name@company.com"
+              className="input flex-1"
+              required
+            />
+            <button
+              type="submit"
+              disabled={saving}
+              className="btn-primary shrink-0 text-xs py-2 px-3"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+          {message && (
+            <p className={`text-xs ${message.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+              {message.text}
+            </p>
+          )}
+        </form>
       </DashboardInfoCard>
 
       <DashboardInfoCard icon={GitFork} title="Connected sources">

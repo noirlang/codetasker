@@ -36,6 +36,7 @@ func (ac *AuthController) RegisterRoutes(app *fiber.App) {
 // RegisterProtectedRoutes mounts auth routes that require JWT verification.
 func (ac *AuthController) RegisterProtectedRoutes(group fiber.Router) {
 	group.Get("/auth/me", ac.GetMe)
+	group.Patch("/auth/me", ac.UpdateMe)
 }
 
 // InitiateOAuth generates a cryptographically random state token, stores it
@@ -208,4 +209,50 @@ func (ac *AuthController) GetMe(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(user)
+}
+
+// UpdateMe updates the current user's profile settings (such as email).
+//
+// Route: PATCH /api/auth/me
+func (ac *AuthController) UpdateMe(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":   "unauthorized",
+			"message": err.Error(),
+		})
+	}
+
+	type updateMeRequest struct {
+		Email string `json:"email"`
+	}
+
+	var req updateMeRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_body",
+			"message": "request body must be valid JSON",
+		})
+	}
+
+	if err := ac.authService.UpdateUserEmail(c.Context(), userID, req.Email); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "update_failed",
+			"message": err.Error(),
+		})
+	}
+
+	// Fetch updated user to return
+	user, err := ac.authService.GetUserByID(c.Context(), userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "fetch_user_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"user":    user,
+		"message": "profile updated successfully",
+	})
 }

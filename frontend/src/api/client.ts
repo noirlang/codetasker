@@ -84,6 +84,15 @@ export const authApi = {
   },
 
   /**
+   * Update the authenticated user's profile settings (such as email).
+   * PATCH /api/auth/me
+   */
+  updateMe: async (email: string): Promise<{ user: User; message: string }> => {
+    const { data } = await client.patch<{ user: User; message: string }>('/auth/me', { email });
+    return data;
+  },
+
+  /**
    * Log the current user out (clears the session cookie server-side).
    * POST /api/auth/logout
    */

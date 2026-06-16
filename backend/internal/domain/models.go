@@ -40,6 +40,9 @@ type User struct {
 	// Username is the GitHub login handle (e.g. "octocat").
 	Username string `bson:"username" json:"username"`
 
+	// Email is the user's email address used for notification delivery.
+	Email string `bson:"email,omitempty" json:"email,omitempty"`
+
 	// AvatarURL points to the user's GitHub profile picture.
 	AvatarURL string `bson:"avatar_url" json:"avatar_url"`
 

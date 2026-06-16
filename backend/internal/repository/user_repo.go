@@ -80,6 +80,7 @@ func (r *UserRepository) Upsert(ctx context.Context, user *domain.User) error {
 		// On subsequent updates this operator is a no-op.
 		"$setOnInsert": bson.M{
 			"created_at": now,
+			"email":      user.Email,
 		},
 	}
 
@@ -139,4 +140,23 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 	}
 
 	return &user, nil
+}
+
+// UpdateEmail updates the email address of a user in the database.
+func (r *UserRepository) UpdateEmail(ctx context.Context, id primitive.ObjectID, email string) error {
+	filter := bson.M{"_id": id}
+	update := bson.M{
+		"$set": bson.M{
+			"email":      email,
+			"updated_at": time.Now().UTC(),
+		},
+	}
+	res, err := r.col.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("UpdateEmail(%s): %w", id.Hex(), err)
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("user %s not found", id.Hex())
+	}
+	return nil
 }

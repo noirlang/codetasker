@@ -111,6 +111,7 @@ func (s *AuthService) UpsertUser(ctx context.Context, ghUser *github.User, token
 	user := &domain.User{
 		GithubID:    ghUser.GetID(),
 		Username:    ghUser.GetLogin(),
+		Email:       ghUser.GetEmail(),
 		AvatarURL:   ghUser.GetAvatarURL(),
 		AccessToken: encryptedToken,
 	}
@@ -190,5 +191,10 @@ func (s *AuthService) GetUserByID(ctx context.Context, id primitive.ObjectID) (*
 		return nil, fmt.Errorf("GetUserByID: user not found")
 	}
 	return user, nil
+}
+
+// UpdateUserEmail updates the email address of a user by ObjectID.
+func (s *AuthService) UpdateUserEmail(ctx context.Context, id primitive.ObjectID, email string) error {
+	return s.userRepo.UpdateEmail(ctx, id, email)
 }
 

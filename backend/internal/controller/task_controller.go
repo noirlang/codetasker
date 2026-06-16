@@ -253,16 +253,16 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 		})
 
 		// Send email notification (non-fatal if SMTP is not configured).
-		// Note: email address is not stored in the User model; the email service
-		// is a no-op when SMTPEnabled=false, so we skip the call gracefully.
-		_ = tc.emailService.SendTaskAssigned(
-			"", // email address not available in User model
-			assignee.Username,
-			actorName,
-			task.Content,
-			task.RepoName,
-			"",
-		)
+		if assignee.Email != "" {
+			_ = tc.emailService.SendTaskAssigned(
+				assignee.Email,
+				assignee.Username,
+				actorName,
+				task.Content,
+				task.RepoName,
+				"",
+			)
+		}
 	}
 
 	// ── Handle status / PR URL update (if provided) ────────────────────────────
@@ -483,6 +483,19 @@ func (tc *TaskController) AddComment(c *fiber.Ctx) error {
 			Message: fmt.Sprintf("%s commented: %s", commenter.Username, req.Content),
 			Link:    fmt.Sprintf("/repos/%s/tasks", task.RepoName),
 		})
+
+		// Send email notification to the assignee if they have an email address
+		if assignee, err := tc.userRepo.FindByObjectID(c.Context(), *task.AssigneeID); err == nil && assignee != nil && assignee.Email != "" {
+			_ = tc.emailService.SendCommentNotification(
+				assignee.Email,
+				assignee.Username,
+				commenter.Username,
+				task.Content,
+				req.Content,
+				task.RepoName,
+				"",
+			)
+		}
 	}
 
 	// Log the comment activity.

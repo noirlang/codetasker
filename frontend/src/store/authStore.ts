@@ -33,6 +33,9 @@ interface AuthState {
    * then redirect to /login.
    */
   logout: () => Promise<void>;
+
+  /** Update the authenticated user's email address in local state and backend. */
+  updateEmail: (email: string) => Promise<void>;
 }
 
 // ── Store implementation ───────────────────────────────────────────────────
@@ -61,6 +64,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     } finally {
       set({ user: null, isAuthenticated: false });
       window.location.href = '/login';
+    }
+  },
+
+  updateEmail: async (email: string) => {
+    try {
+      const res = await authApi.updateMe(email);
+      set({ user: res.user });
+    } catch (err) {
+      throw err;
     }
   },
 }));

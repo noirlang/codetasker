@@ -28,6 +28,9 @@ func (s *EmailService) SendTaskAssigned(toEmail, toName, assignerName, taskConte
 	if !s.cfg.SMTPEnabled {
 		return nil
 	}
+	if frontendURL == "" {
+		frontendURL = s.cfg.FrontendURL
+	}
 	subject := fmt.Sprintf("[CodeTasker] You've been assigned to a task in %s", repoName)
 	body := fmt.Sprintf(`Hello %s,
 
@@ -49,6 +52,9 @@ CodeTasker — Task management for developers
 func (s *EmailService) SendCommentNotification(toEmail, toName, commenterName, taskContent, comment, repoName, frontendURL string) error {
 	if !s.cfg.SMTPEnabled {
 		return nil
+	}
+	if frontendURL == "" {
+		frontendURL = s.cfg.FrontendURL
 	}
 	subject := fmt.Sprintf("[CodeTasker] New comment on your task in %s", repoName)
 	body := fmt.Sprintf(`Hello %s,
