@@ -1,41 +1,92 @@
-# CodeTasker — Two-Way GitHub TODO & Task Management Platform
+<div align="center">
 
-> An intelligent B2B SaaS platform that automatically syncs code annotations (`// TODO:`, `// FIXME:`, `// BUG:`) into trackable Kanban boards, keeping your codebase and project management tools in perfect harmony.
+<img src="frontend/public/logo-kucuk.png" alt="CodeTasker Logo" width="120" />
 
----
+# CodeTasker — Two-Way GitHub TODO & Task Management Engine
 
-## Why CodeTasker? (The Core Problem)
+*Automatically convert inline code comments (TODO, FIXME, BUG) into interactive Kanban tasks, and inject them back into your codebase via automated Pull Requests.*
 
-In software development, there is a constant **disconnect** between project planning tools (like Jira, Trello, or GitHub Issues) and the actual code written. Developers often encounter minor bugs, unfinished tasks, or future improvements while coding. To stay focused, they leave quick annotations like `// TODO:` or `// FIXME:` inline.
+[Website](https://noirlang.tr) | [GitHub Repository](https://github.com/noirlang/codetasker) | [Contributing](CONTRIBUTING.md)
 
-Unfortunately, these comments frequently get **lost and forgotten** in the depths of the codebase, accumulating as silent technical debt. Opening a Jira ticket for every single detail is tedious, causing administrative overhead and disrupting the developer's flow.
+<video src="" width="700" controls></video>
 
-CodeTasker bridges these two worlds. It automates task tracking directly from the developer's natural workspace—the codebase.
+</div>
 
----
+## Overview
 
-## Task Distribution in Large & Mid-Sized Organizations
+CodeTasker is an intelligent task synchronization platform that bridges the gap between your codebase and project management tools. It automatically scans your synchronized GitHub repositories for annotations like `// TODO:`, `// FIXME:`, `// BUG:`, `// HACK:`, and `// NOTE:`, maps them onto a visual Kanban board, and allows you to create and inject comments back into your code via automated Git branches and Pull Requests.
 
-### 1. Large Enterprises
-* **The Challenge:** Enterprise companies handle hundreds of developers working across dozens of microservices and repositories. Teams often have no visibility into each other's codebases or transient tasks left in code. Jira boards become bloated, slow, and hard to align with actual development progress.
-* **The Solution:** CodeTasker aggregates all inline TODOs and bug reports across all repositories into a single, unified panel. Product Owners and Engineering Directors can track real technical debt and pending tasks automatically, without having to badger developers.
+It is designed for engineering organizations of all sizes to eliminate technical debt tracking overhead and keep tasks perfectly in sync with the actual code.
 
-### 2. Mid-Sized & Fast-Growing Teams (Scale-ups)
-* **The Challenge:** In mid-sized teams, **velocity is everything**. Reducing bureaucracy, minimizing status meetings, and maintaining focused coding cycles is critical. However, tracking who is working on what—and where code omissions exist—becomes chaotic as the team scales.
-* **The Solution:** Developers focus entirely on writing code. The moment they push code to GitHub, CodeTasker detects the changes in the background and updates the Kanban board instantly. If a task status changes in code, the board updates. If they need to assign a task from the board, they can inject a TODO back into the code via a Pull Request. Zero friction, maximum speed.
+## Features
 
----
+- **Push-to-Sync (Code to Board):** Adding or removing a TODO comment in your files automatically creates, updates, or completes tasks on the CodeTasker Kanban board.
+- **Task Injection (Board to Code):** Assign and inject tasks directly into your codebase from the board. CodeTasker creates a dedicated branch, inserts the comment at the exact line with the correct language syntax, and opens a GitHub Pull Request.
+- **Language-Sensitive Commenting:** Automatically detects file extensions to write syntactically correct comment blocks (e.g., `//` for Go/TypeScript, `#` for Python/Ruby, `--` for SQL).
+- **Collaborative History:** Manage repository collaborators, roles (Viewer, Developer, Maintainer), view branch commit diffs, and inspect build Actions in real-time.
+- **GitHub Webhook Sync:** Securely sync branch updates via verified SHA256 HMAC signature webhooks.
+- **Security-First Architecture:** Stored GitHub access tokens are encrypted in transit and rest using AES-256-GCM. Session state is managed via secure, HttpOnly, SameSite cookies.
 
-## Key Features
+## System Architecture
 
-* **Push-to-Sync (Code to Board):** Adding or removing a TODO in your code immediately updates the shared Kanban board.
-* **Task Injection (Board to Code):** Assign a task directly to the code from the board. CodeTasker creates a new branch, inserts the comment at the specified line, and opens a **Pull Request (PR)** automatically.
-* **Language-Sensitive Commenting:** Automatically detects file types to insert the correct comment syntax (e.g., `#` for Python, `--` for SQL, `//` for Go/TS).
-* **Collaborative Commit History:** View branch commits, manage collaborator permissions, merge branches, and include **Co-authors** directly from the UI.
-* **Security First:** Features verified webhooks (HMAC-SHA256), encrypted access tokens (AES-256-GCM), and secure authentication cookies.
+CodeTasker is composed of three services:
+1. **Frontend:** A responsive Single Page Application built with React, TypeScript, TailwindCSS, and Vite.
+2. **Backend:** A high-performance REST API built with Go, Fiber, and the official Google Go-GitHub client.
+3. **Database:** MongoDB for storing user sessions, synced repository configurations, collaborators, tasks, and audit logs.
 
----
+## Requirements
 
-## License
+Ensure you have the following installed on your machine:
+- **Go** (version 1.21 or later)
+- **Node.js** (version 18 or later) & **npm**
+- **MongoDB** (running locally or accessible via URI)
 
-GNU General Public License v3.0 (GPL-3.0) - See the [LICENSE](LICENSE) file for details.
+## Local Development Setup
+
+### 1. Environment Configuration
+
+Create a `.env` file in the root directory (and copy it to both `backend/` and `frontend/` directories as needed). Define the following variables:
+
+```env
+PORT=8080
+MONGO_URI=mongodb://localhost:27017
+DB_NAME=codetasker
+GITHUB_CLIENT_ID=your_github_oauth_client_id
+GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
+GITHUB_REDIRECT_URL=http://localhost:8080/api/auth/github/callback
+JWT_SECRET=your_jwt_signing_secret
+WEBHOOK_SECRET=your_github_webhook_hmac_secret
+TOKEN_ENCRYPT_KEY=your_aes_32byte_encryption_key
+FRONTEND_URL=http://localhost:5173
+```
+
+### 2. Run the Backend
+
+```bash
+cd backend
+go run cmd/server/main.go
+```
+
+### 3. Run the Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will start at `http://localhost:5173/` and proxy API requests to `http://localhost:8080`.
+
+## Running with Docker Compose
+
+To start the entire environment (MongoDB, Go API Backend, and React Frontend) with one command:
+
+```bash
+docker-compose up --build
+```
+
+Ensure you have defined your OAuth credentials (`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`) in your root `.env` file before running compose.
+
+## Contributing
+
+Please review the [CONTRIBUTING.md](CONTRIBUTING.md) file for details on our code of conduct and the process for submitting pull requests.
