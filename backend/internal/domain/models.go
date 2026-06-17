@@ -113,6 +113,30 @@ type Task struct {
 
 	// AssigneeAvatarURL is the avatar of the assigned user.
 	AssigneeAvatarURL string `bson:"assignee_avatar_url,omitempty" json:"assignee_avatar_url,omitempty"`
+
+	// CreatedByUsername is the GitHub login of the user who injected this task.
+	// Only populated for tasks created via the inject endpoint (not webhook-parsed).
+	CreatedByUsername string `bson:"created_by_username,omitempty" json:"created_by_username,omitempty"`
+
+	// CreatedByAvatarURL is the avatar of the task creator.
+	CreatedByAvatarURL string `bson:"created_by_avatar_url,omitempty" json:"created_by_avatar_url,omitempty"`
+
+	// CompletedByUsername is the GitHub login of the user who resolved this task.
+	// Set when a user manually marks the task as "resolved" via the API.
+	CompletedByUsername string `bson:"completed_by_username,omitempty" json:"completed_by_username,omitempty"`
+
+	// CompletedByAvatarURL is the avatar of the user who completed the task.
+	CompletedByAvatarURL string `bson:"completed_by_avatar_url,omitempty" json:"completed_by_avatar_url,omitempty"`
+
+	// CompletedAt is the timestamp when the task was marked resolved.
+	CompletedAt *time.Time `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
+
+	// MaintainerUsername is the GitHub login of the maintainer responsible for this file path.
+	// Resolved via CODEOWNERS lookup on task creation/sync.
+	MaintainerUsername string `bson:"maintainer_username,omitempty" json:"maintainer_username,omitempty"`
+
+	// MaintainerEmail is the email address of the maintainer, used for email notifications.
+	MaintainerEmail string `bson:"maintainer_email,omitempty" json:"maintainer_email,omitempty"`
 }
 
 // InjectTaskRequest is the request body for POST /api/tasks/inject.
@@ -219,6 +243,9 @@ const (
 
 	// NotifPRMerged is sent when a pull request linked to a task is merged.
 	NotifPRMerged NotificationType = "pr_merged"
+
+	// NotifTaskCompleted is sent to the maintainer when a developer marks a task as resolved.
+	NotifTaskCompleted NotificationType = "task_completed"
 )
 
 // Notification represents a notification sent to a user.
@@ -250,4 +277,14 @@ type ActivityLog struct {
 	TargetLabel string            `bson:"target_label" json:"target_label"`
 	Meta        map[string]string `bson:"meta,omitempty" json:"meta,omitempty"`
 	CreatedAt   time.Time         `bson:"created_at" json:"created_at"`
+}
+
+// CodeOwnerRule maps a file path glob pattern to a list of GitHub usernames.
+type CodeOwnerRule struct {
+	ID      primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	RepoID  int64              `bson:"repo_id" json:"repo_id"`
+	Pattern string             `bson:"pattern" json:"pattern"`
+	// Owners is a list of GitHub usernames (without the @ prefix).
+	Owners    []string  `bson:"owners" json:"owners"`
+	CreatedAt time.Time `bson:"created_at" json:"created_at"`
 }

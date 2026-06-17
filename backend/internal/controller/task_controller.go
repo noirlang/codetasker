@@ -29,6 +29,7 @@ type TaskController struct {
 	activityRepo     *repository.ActivityRepository
 	userRepo         *repository.UserRepository
 	emailService     *service.EmailService
+	codeOwnerService *service.CodeOwnerService
 	// taskRepo is kept for direct UpdateAssignee calls.
 	taskRepo *repository.TaskRepository
 }
@@ -44,6 +45,7 @@ func NewTaskController(
 	activityRepo *repository.ActivityRepository,
 	userRepo *repository.UserRepository,
 	emailService *service.EmailService,
+	codeOwnerService *service.CodeOwnerService,
 	taskRepo *repository.TaskRepository,
 ) *TaskController {
 	return &TaskController{
@@ -56,6 +58,7 @@ func NewTaskController(
 		activityRepo:     activityRepo,
 		userRepo:         userRepo,
 		emailService:     emailService,
+		codeOwnerService: codeOwnerService,
 		taskRepo:         taskRepo,
 	}
 }
@@ -263,6 +266,46 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 		)
 	}
 
+	// ── Handle completion tracking (when status becomes resolved) ──────────────
+	if req.Status == domain.TaskStatusResolved {
+		completingUser, _ := tc.userRepo.FindByObjectID(c.Context(), userID)
+		completingUsername := ""
+		completingAvatarURL := ""
+		if completingUser != nil {
+			completingUsername = completingUser.Username
+			completingAvatarURL = completingUser.AvatarURL
+		}
+		taskObjIDForCompletion, _ := primitive.ObjectIDFromHex(taskID)
+		_ = tc.taskRepo.UpdateCompletedBy(c.Context(), taskObjIDForCompletion, completingUsername, completingAvatarURL)
+
+		// Notify maintainer via email.
+		if task.MaintainerEmail != "" {
+			_ = tc.emailService.SendTaskCompleted(
+				task.MaintainerEmail,
+				task.MaintainerUsername,
+				completingUsername,
+				task.Content,
+				task.RepoName,
+				task.FilePath,
+				"",
+			)
+		}
+
+		// In-app notification for maintainer.
+		if task.MaintainerUsername != "" {
+			maintainerUser, _ := tc.userRepo.FindByUsername(c.Context(), task.MaintainerUsername)
+			if maintainerUser != nil {
+				_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
+					UserID:  maintainerUser.ID,
+					Type:    domain.NotifTaskCompleted,
+					Title:   "Task Completed",
+					Message: fmt.Sprintf("Task resolved by %s: %s", completingUsername, task.Content),
+					Link:    fmt.Sprintf("/repos/%s/tasks", task.RepoName),
+				})
+			}
+		}
+	}
+
 	// ── Handle status / PR URL / Issue URL update (if provided) ────────────────
 	var updatedTask *domain.Task
 	if req.Status != "" || req.PullRequestURL != "" || req.IssueURL != "" {
@@ -364,6 +407,9 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 		})
 	}
 
+	// Look up the actor so we can set creator fields on the task.
+	actor, _ := tc.userRepo.FindByObjectID(c.Context(), userID)
+
 	// Upsert the new task in MongoDB so it appears immediately without waiting
 	// for the webhook to fire and process the PR merge.
 	taskType := req.Type
@@ -371,15 +417,33 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 		taskType = "TODO"
 	}
 
+	// Resolve maintainer via CODEOWNERS before building the task struct.
+	maintainerUsername, maintainerEmail := tc.codeOwnerService.ResolveMaintainer(
+		c.Context(), userID, req.RepoOwner, req.RepoName, req.FilePath,
+	)
+
+	// Build task with creator and maintainer fields already populated so they
+	// are written into $setOnInsert on first insert.
+	createdByUsername := ""
+	createdByAvatarURL := ""
+	if actor != nil {
+		createdByUsername = actor.Username
+		createdByAvatarURL = actor.AvatarURL
+	}
+
 	task := &domain.Task{
-		RepoID:     synced.RepoID,
-		RepoName:   req.RepoOwner + "/" + req.RepoName,
-		FilePath:   req.FilePath,
-		LineNumber: req.LineNumber,
-		Content:    req.Description,
-		Type:       taskType,
-		Status:     domain.TaskStatusOpen,
-		IssueURL:   req.IssueURL,
+		RepoID:             synced.RepoID,
+		RepoName:           req.RepoOwner + "/" + req.RepoName,
+		FilePath:           req.FilePath,
+		LineNumber:         req.LineNumber,
+		Content:            req.Description,
+		Type:               taskType,
+		Status:             domain.TaskStatusOpen,
+		IssueURL:           req.IssueURL,
+		CreatedByUsername:  createdByUsername,
+		CreatedByAvatarURL: createdByAvatarURL,
+		MaintainerUsername: maintainerUsername,
+		MaintainerEmail:    maintainerEmail,
 	}
 
 	if err := tc.taskService.UpsertInjectedTask(c.Context(), task); err != nil {

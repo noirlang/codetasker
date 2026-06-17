@@ -283,6 +283,68 @@ function TaskDetailModal({
             )}
           </div>
 
+          {/* Authorship & Maintainer metadata */}
+          <div className="border-b border-[#1a1a1a] px-5 py-3 flex flex-col gap-2.5">
+            {/* Created by */}
+            {task.created_by_username && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Created by</span>
+                <div className="flex items-center gap-1.5">
+                  {task.created_by_avatar_url ? (
+                    <img
+                      src={task.created_by_avatar_url}
+                      alt={task.created_by_username}
+                      className="h-4 w-4 rounded-full border border-[#2a2a2a] shrink-0"
+                    />
+                  ) : (
+                    <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a]">
+                      <User size={9} className="text-[#444444]" />
+                    </div>
+                  )}
+                  <span className="text-[11px] text-[#a0a0a0] font-mono">@{task.created_by_username}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Completed by */}
+            {task.completed_by_username && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Completed by</span>
+                <div className="flex items-center gap-1.5">
+                  {task.completed_by_avatar_url ? (
+                    <img
+                      src={task.completed_by_avatar_url}
+                      alt={task.completed_by_username}
+                      className="h-4 w-4 rounded-full border border-[#2a2a2a] shrink-0"
+                    />
+                  ) : (
+                    <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a]">
+                      <User size={9} className="text-[#444444]" />
+                    </div>
+                  )}
+                  <span className="text-[11px] text-emerald-400 font-mono">@{task.completed_by_username}</span>
+                  {task.completed_at && (
+                    <span className="text-[9px] text-[#666666] font-mono">· {timeAgo(task.completed_at)}</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Maintainer */}
+            {task.maintainer_username && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Maintainer</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-400/10 border border-amber-400/20 text-[9px] font-mono text-amber-400">
+                    CODEOWNERS
+                  </span>
+                  <span className="text-[11px] text-amber-300 font-mono">@{task.maintainer_username}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+
           {/* Comments section */}
           <div className="px-5 py-4">
             <div className="flex items-center gap-2 mb-3">
@@ -444,19 +506,47 @@ function TaskCard({
             {task.content}
           </p>
 
-          {/* Assignee row */}
+          {/* Assignee + Creator row */}
           <div
-            className="flex items-center gap-1.5"
+            className="flex items-center justify-between gap-1.5"
             onClick={(e) => { e.stopPropagation(); onOpenDetail(task); }}
             title="Click to manage assignee & comments"
           >
-            <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a] shrink-0">
-              <User size={9} className={assigneeUsername ? 'text-[#a0a0a0]' : 'text-[#444444]'} />
+            {/* Assignee */}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a] shrink-0">
+                <User size={9} className={assigneeUsername ? 'text-[#a0a0a0]' : 'text-[#444444]'} />
+              </div>
+              <span className={`text-[9px] font-mono truncate ${assigneeUsername ? 'text-[#a0a0a0]' : 'text-[#444444] italic'}`}>
+                {assigneeUsername ?? 'Unassigned'}
+              </span>
             </div>
-            <span className={`text-[9px] font-mono truncate ${assigneeUsername ? 'text-[#a0a0a0]' : 'text-[#444444] italic'}`}>
-              {assigneeUsername ?? 'Unassigned'}
-            </span>
+
+            {/* Creator avatar (right side) */}
+            {task.created_by_username && (
+              <div className="flex items-center gap-1 shrink-0" title={`Created by @${task.created_by_username}`}>
+                {task.created_by_avatar_url ? (
+                  <img
+                    src={task.created_by_avatar_url}
+                    alt={task.created_by_username}
+                    className="h-4 w-4 rounded-full border border-[#2a2a2a] opacity-70"
+                  />
+                ) : (
+                  <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a]">
+                    <User size={8} className="text-[#444444]" />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Completed badge */}
+            {task.completed_by_username && (
+              <span className="text-[8px] font-mono text-emerald-400 bg-emerald-400/5 border border-emerald-400/10 px-1 py-0.5 rounded shrink-0">
+                ✓ done
+              </span>
+            )}
           </div>
+
 
           {/* Footer: commit SHA + PR / Issue Link */}
           <div className="border-t border-[#2a2a2a] pt-2 flex items-center justify-between">

@@ -74,6 +74,36 @@ func (s *EmailService) SendCommentNotification(toEmail, toName, commenterName, t
 	return s.send(toEmail, subject, bodyHTML)
 }
 
+// SendTaskCompleted notifies a maintainer that a task under their ownership has been completed.
+// It is a no-op when SMTPEnabled is false or recipient email is empty.
+func (s *EmailService) SendTaskCompleted(toEmail, toName, developerName, taskContent, repoName, filePath, frontendURL string) error {
+	if !s.cfg.SMTPEnabled {
+		s.log.Info("SMTP disabled, skipping SendTaskCompleted", zap.String("toName", toName))
+		return nil
+	}
+	if toEmail == "" {
+		s.log.Info("Recipient email is empty, skipping SendTaskCompleted", zap.String("toName", toName))
+		return nil
+	}
+	if frontendURL == "" {
+		frontendURL = s.cfg.FrontendURL
+	}
+	subject := fmt.Sprintf("[CodeTasker] Task Completed in %s", repoName)
+	bodyText := fmt.Sprintf(
+		"<strong>%s</strong> has marked a task as <strong>resolved</strong> in <strong>%s</strong>."+
+			"<br><br>Task: <i>\"%s\"</i>"+
+			"<br>File: <code>%s</code>",
+		developerName, repoName, taskContent, filePath,
+	)
+
+	bodyHTML := strings.ReplaceAll(emailHTMLTemplate, "{{RECIPIENT_NAME}}", toName)
+	bodyHTML = strings.ReplaceAll(bodyHTML, "{{PROJECT_NAME}}", repoName)
+	bodyHTML = strings.ReplaceAll(bodyHTML, "{{BODY_TEXT}}", bodyText)
+	bodyHTML = strings.ReplaceAll(bodyHTML, "{{ACTION_URL}}", frontendURL)
+
+	return s.send(toEmail, subject, bodyHTML)
+}
+
 // send is the internal SMTP delivery method. It constructs the MIME headers,
 // authenticates with PlainAuth, and delivers the HTML message.
 func (s *EmailService) send(to, subject, htmlBody string) error {

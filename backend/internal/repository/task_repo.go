@@ -59,8 +59,12 @@ func (r *TaskRepository) UpsertTask(ctx context.Context, task *domain.Task) erro
 		},
 		// Only written on first insert — preserves manual status changes.
 		"$setOnInsert": bson.M{
-			"status":     domain.TaskStatusOpen,
-			"created_at": now,
+			"status":                domain.TaskStatusOpen,
+			"created_at":            now,
+			"created_by_username":   task.CreatedByUsername,
+			"created_by_avatar_url": task.CreatedByAvatarURL,
+			"maintainer_username":   task.MaintainerUsername,
+			"maintainer_email":      task.MaintainerEmail,
 		},
 	}
 
@@ -225,6 +229,48 @@ func (r *TaskRepository) UpdateAssignee(ctx context.Context, id primitive.Object
 	res, err := r.col.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return fmt.Errorf("UpdateAssignee(%s): %w", id.Hex(), err)
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("task %s not found", id.Hex())
+	}
+	return nil
+}
+
+// UpdateCompletedBy sets the completed_by fields and completed_at timestamp for a resolved task.
+func (r *TaskRepository) UpdateCompletedBy(ctx context.Context, id primitive.ObjectID, username, avatarURL string) error {
+	now := time.Now().UTC()
+	filter := bson.M{"_id": id}
+	update := bson.M{
+		"$set": bson.M{
+			"completed_by_username":   username,
+			"completed_by_avatar_url": avatarURL,
+			"completed_at":            now,
+			"updated_at":              now,
+		},
+	}
+	res, err := r.col.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("UpdateCompletedBy(%s): %w", id.Hex(), err)
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("task %s not found", id.Hex())
+	}
+	return nil
+}
+
+// UpdateMaintainer sets the maintainer_username and maintainer_email for a task.
+func (r *TaskRepository) UpdateMaintainer(ctx context.Context, id primitive.ObjectID, username, email string) error {
+	filter := bson.M{"_id": id}
+	update := bson.M{
+		"$set": bson.M{
+			"maintainer_username": username,
+			"maintainer_email":    email,
+			"updated_at":          time.Now().UTC(),
+		},
+	}
+	res, err := r.col.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("UpdateMaintainer(%s): %w", id.Hex(), err)
 	}
 	if res.MatchedCount == 0 {
 		return fmt.Errorf("task %s not found", id.Hex())

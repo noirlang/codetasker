@@ -61,6 +61,16 @@ export interface Task {
   assignee_id?: string;
   assignee_username?: string;
   assignee_avatar_url?: string;
+  // Authorship tracking
+  created_by_username?: string;
+  created_by_avatar_url?: string;
+  // Completion tracking
+  completed_by_username?: string;
+  completed_by_avatar_url?: string;
+  completed_at?: string;
+  // Maintainer (resolved via CODEOWNERS)
+  maintainer_username?: string;
+  maintainer_email?: string;
   created_at: string;
   updated_at: string;
 }
