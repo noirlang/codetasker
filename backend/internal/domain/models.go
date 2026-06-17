@@ -139,6 +139,9 @@ type InjectTaskRequest struct {
 
 	// Type is the comment tag type, e.g. "TODO", "FIXME", "BUG", "HACK", "NOTE".
 	Type string `json:"type"`
+
+	// IssueURL is the linked GitHub Issue URL.
+	IssueURL string `json:"issue_url,omitempty"`
 }
 
 // UpdateTaskRequest is the request body for PATCH /api/tasks/:id.

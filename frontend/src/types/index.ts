@@ -96,6 +96,7 @@ export interface InjectTaskRequest {
   description: string;
   branch: string;
   type: string;
+  issue_url?: string;
 }
 
 /* ── API Error ────────────────────────────────────────────── */

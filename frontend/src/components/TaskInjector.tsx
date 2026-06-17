@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, ExternalLink } from 'lucide-react';
 import { tasksApi } from '../api/client';
-import type { InjectTaskRequest, ApiError } from '../types';
+import type { InjectTaskRequest, ApiError, Issue } from '../types';
 import Spinner from './ui/Spinner';
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -20,6 +20,7 @@ interface TaskInjectorProps {
   repoOwner: string;
   repoName: string;
   defaultBranch: string;
+  issues: Issue[];
   /** Pre-fill line number (from clicking a line in CodeViewer) */
   prefilledLine?: number;
   /** Pre-fill file path (from the currently open file) */
@@ -34,15 +35,17 @@ export default function TaskInjector({
   repoOwner,
   repoName,
   defaultBranch,
+  issues,
   prefilledLine,
   prefilledFile,
 }: TaskInjectorProps) {
   // ── Form state ────────────────────────────────────────────────────────────
-  const [filePath,    setFilePath]    = useState('');
-  const [lineNumber,  setLineNumber]  = useState('');
-  const [taskType,    setTaskType]    = useState('TODO');
-  const [description, setDescription] = useState('');
-  const [branch,      setBranch]      = useState('');
+  const [filePath,          setFilePath]          = useState('');
+  const [lineNumber,        setLineNumber]        = useState('');
+  const [taskType,          setTaskType]          = useState('TODO');
+  const [description,       setDescription]       = useState('');
+  const [branch,            setBranch]            = useState('');
+  const [selectedIssueUrl,  setSelectedIssueUrl]  = useState('');
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,6 +63,7 @@ export default function TaskInjector({
       setTaskType('TODO');
       setBranch(defaultBranch);
       setDescription('');
+      setSelectedIssueUrl('');
       setPrUrl(null);
       setFormError(null);
       setIsSubmitting(false);
@@ -105,6 +109,7 @@ export default function TaskInjector({
       description: description.trim(),
       branch:      branch.trim(),
       type:        taskType,
+      issue_url:   selectedIssueUrl || undefined,
     };
 
     setIsSubmitting(true);
@@ -271,6 +276,36 @@ export default function TaskInjector({
                   <option value="BUG">BUG</option>
                   <option value="HACK">HACK</option>
                   <option value="NOTE">NOTE</option>
+                </select>
+              </div>
+
+              {/* Link Issue (optional) */}
+              <div className="flex flex-col gap-1.5">
+                <label className="section-label" htmlFor="inj-issue">
+                  Link GitHub Issue (Optional)
+                </label>
+                <select
+                  id="inj-issue"
+                  className="input text-xs"
+                  value={selectedIssueUrl}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedIssueUrl(val);
+                    if (val) {
+                      const matched = issues.find(i => i.html_url === val);
+                      if (matched) {
+                        setDescription(`Resolve #${matched.number}: ${matched.title}`);
+                      }
+                    }
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <option value="">-- No Issue Linked --</option>
+                  {issues.map(iss => (
+                    <option key={iss.number} value={iss.html_url}>
+                      #{iss.number} - {iss.title}
+                    </option>
+                  ))}
                 </select>
               </div>
 

@@ -725,6 +725,7 @@ export default function RepoView() {
         repoOwner={owner}
         repoName={repoName}
         defaultBranch={defaultBranch}
+        issues={issues}
         prefilledLine={prefilledLine}
         prefilledFile={selectedFile ?? undefined}
       />

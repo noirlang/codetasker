@@ -366,14 +366,20 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 
 	// Upsert the new task in MongoDB so it appears immediately without waiting
 	// for the webhook to fire and process the PR merge.
+	taskType := req.Type
+	if taskType == "" {
+		taskType = "TODO"
+	}
+
 	task := &domain.Task{
 		RepoID:     synced.RepoID,
 		RepoName:   req.RepoOwner + "/" + req.RepoName,
 		FilePath:   req.FilePath,
 		LineNumber: req.LineNumber,
 		Content:    req.Description,
-		Type:       "TODO",
+		Type:       taskType,
 		Status:     domain.TaskStatusOpen,
+		IssueURL:   req.IssueURL,
 	}
 
 	if err := tc.taskService.UpsertInjectedTask(c.Context(), task); err != nil {
