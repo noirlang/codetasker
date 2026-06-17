@@ -925,6 +925,41 @@ func (s *GithubService) MergeBranch(ctx context.Context, userID primitive.Object
 	return resp, nil
 }
 
+// MergePullRequest merges an open pull request by its number.
+// mergeMethod must be one of: "merge", "squash", "rebase".
+func (s *GithubService) MergePullRequest(ctx context.Context, userID primitive.ObjectID, owner, repo string, prNumber int, commitTitle, commitMessage, mergeMethod string) (string, error) {
+	if err := validateName(owner, "owner"); err != nil {
+		return "", err
+	}
+	if err := validateName(repo, "repo"); err != nil {
+		return "", err
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("MergePullRequest resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+
+	if mergeMethod == "" {
+		mergeMethod = "merge"
+	}
+
+	options := &github.PullRequestOptions{
+		CommitTitle:   commitTitle,
+		MergeMethod:   mergeMethod,
+	}
+
+	result, _, err := client.PullRequests.Merge(ctx, owner, repo, prNumber, commitMessage, options)
+	if err != nil {
+		return "", fmt.Errorf("MergePullRequest API call: %w", err)
+	}
+
+	return result.GetSHA(), nil
+}
+
+
 // GetRepository fetches repository details including the default branch.
 func (s *GithubService) GetRepository(ctx context.Context, userID primitive.ObjectID, owner, repo string) (*github.Repository, error) {
 	if err := validateName(owner, "owner"); err != nil {

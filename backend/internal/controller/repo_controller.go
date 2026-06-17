@@ -69,6 +69,7 @@ func (rc *RepoController) RegisterRoutes(group fiber.Router) {
 	group.Get("/repos/:owner/:repo/actions/workflows", rc.GetActionWorkflows)
 	group.Get("/repos/:owner/:repo/actions/runs", rc.GetActionRuns)
 	group.Get("/repos/:owner/:repo/pulls", rc.GetPulls)
+	group.Post("/repos/:owner/:repo/pulls/:number/merge", rc.MergePullRequest)
 	group.Post("/repos/:owner/:repo/merge", rc.MergeBranch)
 
 	// Collaborators management
@@ -923,6 +924,86 @@ func (rc *RepoController) MergeBranch(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message":    "branch merged successfully",
 		"commit_sha": resp.GetSHA(),
+	})
+}
+
+// MergePullRequest merges an open pull request by its PR number.
+// Supports merge methods: "merge" (default), "squash", "rebase".
+//
+// Route: POST /api/repos/:owner/:repo/pulls/:number/merge
+func (rc *RepoController) MergePullRequest(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+	numberStr := c.Params("number")
+	prNumber, err := strconv.Atoi(numberStr)
+	if err != nil || prNumber < 1 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_parameter",
+			"message": "PR number must be a positive integer",
+		})
+	}
+
+	type requestBody struct {
+		MergeMethod   string `json:"merge_method"`   // "merge", "squash", "rebase"
+		CommitTitle   string `json:"commit_title"`
+		CommitMessage string `json:"commit_message"`
+	}
+
+	var body requestBody
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_request",
+			"message": err.Error(),
+		})
+	}
+
+	// Validate merge method
+	if body.MergeMethod == "" {
+		body.MergeMethod = "merge"
+	}
+	allowedMethods := map[string]bool{"merge": true, "squash": true, "rebase": true}
+	if !allowedMethods[body.MergeMethod] {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_merge_method",
+			"message": "merge_method must be one of: merge, squash, rebase",
+		})
+	}
+
+	// Verify collaborator permissions
+	syncedRepo, err := rc.syncedRepoRepo.FindByRepoName(c.Context(), owner+"/"+repo)
+	if err == nil && syncedRepo != nil {
+		if syncedRepo.UserID != userID {
+			collab, _ := rc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, syncedRepo.RepoID)
+			if collab == nil || (collab.Role != domain.RoleOwner && collab.Role != domain.RoleMaintainer && collab.Role != domain.RoleDeveloper) {
+				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+					"error":   "forbidden",
+					"message": "You do not have write access to merge pull requests in this repository",
+				})
+			}
+		}
+	}
+
+	sha, err := rc.githubService.MergePullRequest(
+		c.Context(), userID, owner, repo,
+		prNumber, body.CommitTitle, body.CommitMessage, body.MergeMethod,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "merge_pr_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":    "pull request merged successfully",
+		"commit_sha": sha,
 	})
 }
 

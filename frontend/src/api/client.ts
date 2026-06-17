@@ -326,6 +326,33 @@ export const reposApi = {
   },
 
   /**
+   * Merge an open pull request by its PR number.
+   * POST /api/repos/:owner/:repo/pulls/:number/merge
+   */
+  mergePR: async (
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: {
+      mergeMethod?: 'merge' | 'squash' | 'rebase';
+      commitTitle?: string;
+      commitMessage?: string;
+    }
+  ): Promise<{ message: string; commit_sha: string }> => {
+    const { data } = await client.post<{ message: string; commit_sha: string }>(
+      `/repos/${owner}/${repo}/pulls/${prNumber}/merge`,
+      {
+        merge_method:   options?.mergeMethod   ?? 'merge',
+        commit_title:   options?.commitTitle   ?? '',
+        commit_message: options?.commitMessage ?? '',
+      }
+    );
+    return data;
+  },
+
+
+
+  /**
    * Manually sync tasks for a repository.
    * POST /api/repos/:owner/:repo/sync
    */
