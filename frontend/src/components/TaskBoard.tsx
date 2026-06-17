@@ -33,11 +33,12 @@ import {
   Send,
   Trash2,
   UserMinus,
+  AlertCircle,
 } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
 import { commentsApi, reposApi } from '../api/client';
 import { useAuthStore } from '../store/authStore';
-import type { Task, TaskStatus, PullRequest, Collaborator, Comment } from '../types';
+import type { Task, TaskStatus, PullRequest, Collaborator, Comment, Issue } from '../types';
 import Badge from './ui/Badge';
 import Spinner from './ui/Spinner';
 
@@ -71,8 +72,12 @@ interface TaskBoardProps {
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   /** List of active pull requests for linking */
   pulls: PullRequest[];
+  /** List of active issues for linking */
+  issues: Issue[];
   /** Handler to pair a task to a PR */
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
+  /** Handler to pair a task to an Issue */
+  onLinkTaskToIssue: (taskId: string, issueUrl: string) => Promise<void>;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -88,6 +93,13 @@ function getPrNumber(url?: string): string | null {
   if (!url) return null;
   const match = url.match(/\/pull\/(\d+)/);
   return match ? `#${match[1]}` : 'PR';
+}
+
+// Helper to extract Issue number from URL
+function getIssueNumber(url?: string): string | null {
+  if (!url) return null;
+  const match = url.match(/\/issues\/(\d+)/);
+  return match ? `#${match[1]}` : 'Issue';
 }
 
 // ── Task Detail Modal (comments + assignee) ───────────────────────────────────
@@ -368,7 +380,9 @@ function TaskCard({
   onInjectClick,
   onTaskClick,
   pulls,
+  issues,
   onLinkTaskToPR,
+  onLinkTaskToIssue,
   onOpenDetail,
 }: {
   task: Task;
@@ -376,10 +390,13 @@ function TaskCard({
   onInjectClick: (lineNumber?: number) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
+  issues: Issue[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
+  onLinkTaskToIssue: (taskId: string, issueUrl: string) => Promise<void>;
   onOpenDetail: (task: Task) => void;
 }) {
   const [showLinkSelect, setShowLinkSelect] = useState(false);
+  const [showIssueSelect, setShowIssueSelect] = useState(false);
   const displayPath = task.file_path.split('/').slice(-2).join('/');
   const shortSha    = task.commit_sha.slice(0, 7);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -441,7 +458,7 @@ function TaskCard({
             </span>
           </div>
 
-          {/* Footer: commit SHA + PR Link */}
+          {/* Footer: commit SHA + PR / Issue Link */}
           <div className="border-t border-[#2a2a2a] pt-2 flex items-center justify-between">
             <span
               className="font-mono text-[9px] text-[#666666]"
@@ -462,7 +479,7 @@ function TaskCard({
                   {getPrNumber(task.pr_url)}
                 </a>
               ) : (
-                showLinkSelect ? (
+                showLinkSelect && (
                   <select
                     className="bg-[#111111] border border-[#3a3a3a] rounded text-[9px] text-white px-1 py-0.5 focus:outline-none max-w-[120px]"
                     defaultValue=""
@@ -483,15 +500,60 @@ function TaskCard({
                     ))}
                     <option value="cancel">Cancel</option>
                   </select>
-                ) : (
-                  <button
-                    onClick={() => setShowLinkSelect(true)}
-                    className="text-[9px] text-[#666666] hover:text-white border border-[#2a2a2a] hover:border-[#3a3a3a] px-1.5 py-0.5 rounded transition-all font-mono"
-                    title="Pair with Pull Request"
-                  >
-                    Link PR
-                  </button>
                 )
+              )}
+
+              {task.issue_url ? (
+                <a
+                  href={task.issue_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[9px] text-emerald-400 bg-emerald-400/5 border border-emerald-400/10 px-1.5 py-0.5 rounded font-mono hover:bg-emerald-400/10 transition-colors"
+                >
+                  <AlertCircle size={9} />
+                  {getIssueNumber(task.issue_url)}
+                </a>
+              ) : (
+                showIssueSelect && (
+                  <select
+                    className="bg-[#111111] border border-[#3a3a3a] rounded text-[9px] text-white px-1 py-0.5 focus:outline-none max-w-[120px]"
+                    defaultValue=""
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      if (val && val !== 'cancel') {
+                        await onLinkTaskToIssue(task.id, val);
+                      }
+                      setShowIssueSelect(false);
+                    }}
+                    onBlur={() => setShowIssueSelect(false)}
+                  >
+                    <option value="" disabled>Link Issue...</option>
+                    {issues.map(iss => (
+                      <option key={iss.number} value={iss.html_url}>
+                        #{iss.number} - {iss.title}
+                      </option>
+                    ))}
+                    <option value="cancel">Cancel</option>
+                  </select>
+                )
+              )}
+
+              {!task.pr_url && !showLinkSelect && (
+                <button
+                  onClick={() => setShowLinkSelect(true)}
+                  className="text-[8px] text-[#666666] hover:text-[#a0a0a0] border border-[#2a2a2a] px-1.5 py-0.5 rounded font-mono transition-all"
+                >
+                  Link PR
+                </button>
+              )}
+
+              {!task.issue_url && !showIssueSelect && (
+                <button
+                  onClick={() => setShowIssueSelect(true)}
+                  className="text-[8px] text-[#666666] hover:text-[#a0a0a0] border border-[#2a2a2a] px-1.5 py-0.5 rounded font-mono transition-all"
+                >
+                  Link Issue
+                </button>
               )}
             </div>
           </div>
@@ -510,7 +572,9 @@ function KanbanColumn({
   onInjectClick,
   onTaskClick,
   pulls,
+  issues,
   onLinkTaskToPR,
+  onLinkTaskToIssue,
   onOpenDetail,
 }: {
   columnId: TaskStatus;
@@ -519,7 +583,9 @@ function KanbanColumn({
   onInjectClick: (lineNumber?: number) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
+  issues: Issue[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
+  onLinkTaskToIssue: (taskId: string, issueUrl: string) => Promise<void>;
   onOpenDetail: (task: Task) => void;
 }) {
   return (
@@ -553,7 +619,9 @@ function KanbanColumn({
                 onInjectClick={onInjectClick}
                 onTaskClick={onTaskClick}
                 pulls={pulls}
+                issues={issues}
                 onLinkTaskToPR={onLinkTaskToPR}
+                onLinkTaskToIssue={onLinkTaskToIssue}
                 onOpenDetail={onOpenDetail}
               />
             ))}
@@ -579,17 +647,22 @@ function TaskListItem({
   onInjectClick,
   onTaskClick,
   pulls,
+  issues,
   onLinkTaskToPR,
+  onLinkTaskToIssue,
   onOpenDetail,
 }: {
   task: Task;
   onInjectClick: (lineNumber?: number) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
+  issues: Issue[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
+  onLinkTaskToIssue: (taskId: string, issueUrl: string) => Promise<void>;
   onOpenDetail: (task: Task) => void;
 }) {
   const [showLinkSelect, setShowLinkSelect] = useState(false);
+  const [showIssueSelect, setShowIssueSelect] = useState(false);
   const shortSha = task.commit_sha.slice(0, 7);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const assigneeUsername: string | null = (task as any).assignee_username ?? null;
@@ -669,6 +742,49 @@ function TaskListItem({
           )
         )}
 
+        {/* Issue Linkage */}
+        {task.issue_url ? (
+          <a
+            href={task.issue_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[9px] text-emerald-400 bg-emerald-400/5 border border-emerald-400/10 px-1.5 py-0.5 rounded font-mono hover:bg-emerald-400/10 transition-colors"
+          >
+            <AlertCircle size={9} />
+            {getIssueNumber(task.issue_url)}
+          </a>
+        ) : (
+          showIssueSelect ? (
+            <select
+              className="bg-[#111111] border border-[#3a3a3a] rounded text-[9px] text-white px-1 py-0.5 focus:outline-none max-w-[120px]"
+              defaultValue=""
+              onChange={async (e) => {
+                const val = e.target.value;
+                if (val && val !== 'cancel') {
+                  await onLinkTaskToIssue(task.id, val);
+                }
+                setShowIssueSelect(false);
+              }}
+              onBlur={() => setShowIssueSelect(false)}
+            >
+              <option value="" disabled>Link Issue...</option>
+              {issues.map(iss => (
+                <option key={iss.number} value={iss.html_url}>
+                  #{iss.number} - {iss.title}
+                </option>
+              ))}
+              <option value="cancel">Cancel</option>
+            </select>
+          ) : (
+            <button
+              onClick={() => setShowIssueSelect(true)}
+              className="text-[9px] text-[#666666] hover:text-white border border-[#2a2a2a] hover:border-[#3a3a3a] px-1.5 py-0.5 rounded transition-all font-mono"
+            >
+              Link Issue
+            </button>
+          )
+        )}
+
         <span
           className="font-mono text-[9px] text-[#666666]"
           style={{ fontFamily: "'JetBrains Mono', monospace" }}
@@ -687,14 +803,18 @@ function ListView({
   onInjectClick,
   onTaskClick,
   pulls,
+  issues,
   onLinkTaskToPR,
+  onLinkTaskToIssue,
   onOpenDetail,
 }: {
   tasks: Task[];
   onInjectClick: (lineNumber?: number) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
+  issues: Issue[];
   onLinkTaskToPR: (taskId: string, prUrl: string) => Promise<void>;
+  onLinkTaskToIssue: (taskId: string, issueUrl: string) => Promise<void>;
   onOpenDetail: (task: Task) => void;
 }) {
   // Group tasks by file_path, sorted by file then line number
@@ -734,7 +854,9 @@ function ListView({
               onInjectClick={onInjectClick}
               onTaskClick={onTaskClick}
               pulls={pulls}
+              issues={issues}
               onLinkTaskToPR={onLinkTaskToPR}
+              onLinkTaskToIssue={onLinkTaskToIssue}
               onOpenDetail={onOpenDetail}
             />
           ))}
@@ -759,7 +881,9 @@ export default function TaskBoard({
   onInjectClick,
   onTaskClick,
   pulls,
+  issues,
   onLinkTaskToPR,
+  onLinkTaskToIssue,
 }: TaskBoardProps) {
   const { tasks, isLoading, error, fetchTasks, updateTaskStatus, updateTaskAssignee } =
     useTaskStore();
@@ -908,7 +1032,9 @@ export default function TaskBoard({
                     onInjectClick={onInjectClick}
                     onTaskClick={onTaskClick}
                     pulls={pulls}
+                    issues={issues}
                     onLinkTaskToPR={onLinkTaskToPR}
+                    onLinkTaskToIssue={onLinkTaskToIssue}
                     onOpenDetail={setDetailTask}
                   />
                 ))}
@@ -920,7 +1046,9 @@ export default function TaskBoard({
               onInjectClick={onInjectClick}
               onTaskClick={onTaskClick}
               pulls={pulls}
+              issues={issues}
               onLinkTaskToPR={onLinkTaskToPR}
+              onLinkTaskToIssue={onLinkTaskToIssue}
               onOpenDetail={setDetailTask}
             />
           )}

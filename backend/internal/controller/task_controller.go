@@ -160,14 +160,14 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "invalid_body",
-			"message": "request body must be valid JSON with 'status', 'pr_url', 'assignee_username', or 'clear_assignee' fields",
+			"message": "request body must be valid JSON with 'status', 'pr_url', 'issue_url', 'assignee_username', or 'clear_assignee' fields",
 		})
 	}
 
-	if req.Status == "" && req.PullRequestURL == "" && req.AssigneeUsername == "" && !req.ClearAssignee {
+	if req.Status == "" && req.PullRequestURL == "" && req.IssueURL == "" && req.AssigneeUsername == "" && !req.ClearAssignee {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "missing_fields",
-			"message": "at least one of 'status', 'pr_url', 'assignee_username', or 'clear_assignee' is required",
+			"message": "at least one of 'status', 'pr_url', 'issue_url', 'assignee_username', or 'clear_assignee' is required",
 		})
 	}
 
@@ -263,10 +263,10 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 		)
 	}
 
-	// ── Handle status / PR URL update (if provided) ────────────────────────────
+	// ── Handle status / PR URL / Issue URL update (if provided) ────────────────
 	var updatedTask *domain.Task
-	if req.Status != "" || req.PullRequestURL != "" {
-		updatedTask, err = tc.taskService.UpdateTask(c.Context(), taskID, req.Status, req.PullRequestURL)
+	if req.Status != "" || req.PullRequestURL != "" || req.IssueURL != "" {
+		updatedTask, err = tc.taskService.UpdateTask(c.Context(), taskID, req.Status, req.PullRequestURL, req.IssueURL)
 		if err != nil {
 			// If the error message indicates the task was not found, return 404.
 			if isNotFoundError(err.Error()) {

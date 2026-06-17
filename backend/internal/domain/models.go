@@ -92,6 +92,9 @@ type Task struct {
 	// PullRequestURL is the linked GitHub Pull Request URL.
 	PullRequestURL string `bson:"pr_url,omitempty" json:"pr_url,omitempty"`
 
+	// IssueURL is the linked GitHub Issue URL.
+	IssueURL string `bson:"issue_url,omitempty" json:"issue_url,omitempty"`
+
 	// CommitSHA is the Git commit hash at which this annotation was last seen.
 	// Useful for linking to the exact commit on GitHub.
 	CommitSHA string `bson:"commit_sha" json:"commit_sha"`
@@ -146,6 +149,9 @@ type UpdateTaskRequest struct {
 
 	// PullRequestURL is the Pull Request URL linked to the task.
 	PullRequestURL string `json:"pr_url,omitempty"`
+
+	// IssueURL is the GitHub Issue URL linked to the task.
+	IssueURL string `json:"issue_url,omitempty"`
 
 	// AssigneeUsername is the GitHub login of the user to assign to this task.
 	AssigneeUsername string `json:"assignee_username,omitempty"`

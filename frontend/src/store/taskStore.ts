@@ -47,6 +47,11 @@ interface TaskState {
   linkTaskToPR: (id: string, prUrl: string) => Promise<void>;
 
   /**
+   * Link a task to a GitHub Issue URL.
+   */
+  linkTaskToIssue: (id: string, issueUrl: string) => Promise<void>;
+
+  /**
    * Update a task's assignee in the backend and local store.
    */
   updateTaskAssignee: (id: string, username: string | null) => Promise<void>;
@@ -135,6 +140,32 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
       const apiErr = err as ApiError;
       set({ error: apiErr.message ?? 'Failed to link task to Pull Request.' });
+    }
+  },
+
+  // ── Link task to Issue (optimistic) ─────────────────────────────────────
+
+  linkTaskToIssue: async (id: string, issueUrl: string) => {
+    const previousTasks = get().tasks;
+
+    // Optimistically update locally
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.id === id ? { ...t, issue_url: issueUrl, updated_at: new Date().toISOString() } : t
+      ),
+    }));
+
+    try {
+      const updated = await tasksApi.updateTask(id, { issue_url: issueUrl });
+      set((state) => ({
+        tasks: state.tasks.map((t) => (t.id === updated.id ? updated : t)),
+      }));
+    } catch (err) {
+      // Revert on failure
+      set({ tasks: previousTasks });
+
+      const apiErr = err as ApiError;
+      set({ error: apiErr.message ?? 'Failed to link task to GitHub Issue.' });
     }
   },
 

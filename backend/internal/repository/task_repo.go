@@ -144,9 +144,9 @@ func (r *TaskRepository) UpdateStatus(ctx context.Context, id primitive.ObjectID
 	return nil
 }
 
-// UpdateTask atomically updates the status, pr_url, and updated_at fields of the task
+// UpdateTask atomically updates the status, pr_url, issue_url, and updated_at fields of the task
 // identified by id.
-func (r *TaskRepository) UpdateTask(ctx context.Context, id primitive.ObjectID, status domain.TaskStatus, prURL string) error {
+func (r *TaskRepository) UpdateTask(ctx context.Context, id primitive.ObjectID, status domain.TaskStatus, prURL string, issueURL string) error {
 	filter := bson.M{"_id": id}
 	setFields := bson.M{
 		"updated_at": time.Now().UTC(),
@@ -159,6 +159,13 @@ func (r *TaskRepository) UpdateTask(ctx context.Context, id primitive.ObjectID, 
 			setFields["pr_url"] = ""
 		} else {
 			setFields["pr_url"] = prURL
+		}
+	}
+	if issueURL != "" {
+		if issueURL == "clear" {
+			setFields["issue_url"] = ""
+		} else {
+			setFields["issue_url"] = issueURL
 		}
 	}
 

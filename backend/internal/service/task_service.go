@@ -278,8 +278,8 @@ func (s *TaskService) UpdateTaskStatus(ctx context.Context, id string, status do
 	return task, nil
 }
 
-// UpdateTask changes the lifecycle status and/or PullRequestURL of a task.
-func (s *TaskService) UpdateTask(ctx context.Context, id string, status domain.TaskStatus, prURL string) (*domain.Task, error) {
+// UpdateTask changes the lifecycle status, PullRequestURL, and/or IssueURL of a task.
+func (s *TaskService) UpdateTask(ctx context.Context, id string, status domain.TaskStatus, prURL string, issueURL string) (*domain.Task, error) {
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, fmt.Errorf("UpdateTask: invalid task ID %q: %w", id, err)
@@ -295,7 +295,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, id string, status domain.T
 		}
 	}
 
-	if err := s.taskRepo.UpdateTask(ctx, objID, status, prURL); err != nil {
+	if err := s.taskRepo.UpdateTask(ctx, objID, status, prURL, issueURL); err != nil {
 		return nil, fmt.Errorf("UpdateTask: %w", err)
 	}
 

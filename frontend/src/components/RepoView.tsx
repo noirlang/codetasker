@@ -31,7 +31,7 @@ import {
 import { reposApi } from '../api/client';
 import { useTaskStore } from '../store/taskStore';
 import { useAuthStore } from '../store/authStore';
-import type { FileTreeNode, ApiError, PullRequest, Collaborator } from '../types';
+import type { FileTreeNode, ApiError, PullRequest, Collaborator, Issue } from '../types';
 import CodeViewer from './CodeViewer';
 import TaskBoard from './TaskBoard';
 import TaskInjector from './TaskInjector';
@@ -223,6 +223,7 @@ export default function RepoView() {
   const [leftTab,         setLeftTab]         = useState<'files' | 'commits' | 'access'>('files');
   const [rightTab,        setRightTab]        = useState<'tasks' | 'pulls' | 'actions' | 'analytics'>('tasks');
   const [pulls,           setPulls]           = useState<PullRequest[]>([]);
+  const [issues,          setIssues]          = useState<Issue[]>([]);
 
   const currentUser = useAuthStore((s) => s.user);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -267,6 +268,7 @@ export default function RepoView() {
 
   const tasks = useTaskStore((s) => s.tasks);
   const linkTaskToPR = useTaskStore((s) => s.linkTaskToPR);
+  const linkTaskToIssue = useTaskStore((s) => s.linkTaskToIssue);
   const syncRepoTasks = useTaskStore((s) => s.syncRepoTasks);
   const [repoId, setRepoId] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -366,11 +368,23 @@ export default function RepoView() {
     }
   }, [owner, repoName]);
 
+  // Fetch issues
+  const fetchIssues = useCallback(async () => {
+    if (!owner || !repoName) return;
+    try {
+      const data = await reposApi.listIssues(owner, repoName, 'open');
+      setIssues(data || []);
+    } catch (err) {
+      console.error('Failed to load issues:', err);
+    }
+  }, [owner, repoName]);
+
   useEffect(() => {
     if (owner && repoName) {
       fetchPulls();
+      fetchIssues();
     }
-  }, [owner, repoName, fetchPulls]);
+  }, [owner, repoName, fetchPulls, fetchIssues]);
 
   // Handle merge complete
   const handleMergeComplete = useCallback(() => {
@@ -670,14 +684,16 @@ export default function RepoView() {
 
           <div className="flex-1 overflow-hidden flex flex-col">
             {rightTab === 'tasks' ? (
-               <TaskBoard
+              <TaskBoard
                 repoId={repoId}
                 repoOwner={owner}
                 repoName={repoName}
                 onInjectClick={handleInjectClick}
                 onTaskClick={handleTaskClick}
                 pulls={pulls}
+                issues={issues}
                 onLinkTaskToPR={linkTaskToPR}
+                onLinkTaskToIssue={linkTaskToIssue}
               />
             ) : rightTab === 'pulls' ? (
               <PullRequestPanel

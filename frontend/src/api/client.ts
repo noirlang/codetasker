@@ -490,7 +490,7 @@ export const tasksApi = {
    */
   updateTask: async (
     id: string,
-    updates: { status?: TaskStatus; pr_url?: string; assignee_username?: string; clear_assignee?: boolean }
+    updates: { status?: TaskStatus; pr_url?: string; issue_url?: string; assignee_username?: string; clear_assignee?: boolean }
   ): Promise<Task> => {
     const { data } = await client.patch<Task>(`/tasks/${id}`, updates);
     return data;
