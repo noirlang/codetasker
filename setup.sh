@@ -28,22 +28,46 @@ generate_key() {
 echo -e "${BLUE}[*] Checking prerequisites...${NC}"
 
 DOCKER_CMD=""
+CONTAINER_ENGINE=""
+
+# Check container engine
 if command -v docker >/dev/null 2>&1; then
-  echo -e "  - Docker: ${GREEN}Installed${NC}"
+  CONTAINER_ENGINE="docker"
+  echo -e "  - Container Engine: ${GREEN}Docker (Installed)${NC}"
+elif command -v podman >/dev/null 2>&1; then
+  CONTAINER_ENGINE="podman"
+  echo -e "  - Container Engine: ${GREEN}Podman (Installed)${NC}"
 else
-  echo -e "  - Docker: ${RED}Not Found${NC}"
-  echo -e "${YELLOW}Warning: Docker is required to run the containers. Please install Docker first.${NC}"
+  echo -e "  - Container Engine: ${RED}Not Found${NC}"
+  echo -e "${YELLOW}Warning: Docker or Podman is required to run the containers. Please install one first.${NC}"
 fi
 
-if command -v docker-compose >/dev/null 2>&1; then
-  DOCKER_CMD="docker-compose"
-  echo -e "  - Docker Compose: ${GREEN}Installed (docker-compose)${NC}"
-elif docker compose version >/dev/null 2>&1; then
-  DOCKER_CMD="docker compose"
-  echo -e "  - Docker Compose: ${GREEN}Installed (docker compose)${NC}"
+# Check compose tool based on container engine
+if [ "$CONTAINER_ENGINE" = "podman" ]; then
+  if command -v podman-compose >/dev/null 2>&1; then
+    DOCKER_CMD="podman-compose"
+    echo -e "  - Compose Tool: ${GREEN}Installed (podman-compose)${NC}"
+  elif podman compose version >/dev/null 2>&1; then
+    DOCKER_CMD="podman compose"
+    echo -e "  - Compose Tool: ${GREEN}Installed (podman compose)${NC}"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    DOCKER_CMD="docker-compose"
+    echo -e "  - Compose Tool: ${GREEN}Installed (docker-compose)${NC}"
+  else
+    echo -e "  - Compose Tool: ${RED}Not Found${NC}"
+    echo -e "${YELLOW}Warning: podman-compose or docker-compose is required. Please install one.${NC}"
+  fi
 else
-  echo -e "  - Docker Compose: ${RED}Not Found${NC}"
-  echo -e "${YELLOW}Warning: Docker Compose is required. Please install docker-compose or docker-compose-plugin.${NC}"
+  if command -v docker-compose >/dev/null 2>&1; then
+    DOCKER_CMD="docker-compose"
+    echo -e "  - Compose Tool: ${GREEN}Installed (docker-compose)${NC}"
+  elif docker compose version >/dev/null 2>&1; then
+    DOCKER_CMD="docker compose"
+    echo -e "  - Compose Tool: ${GREEN}Installed (docker compose)${NC}"
+  else
+    echo -e "  - Compose Tool: ${RED}Not Found${NC}"
+    echo -e "${YELLOW}Warning: Docker Compose is required. Please install docker-compose or docker-compose-plugin.${NC}"
+  fi
 fi
 
 echo ""
@@ -177,7 +201,7 @@ echo ""
 
 # Ask to start
 if [ -n "$DOCKER_CMD" ]; then
-  read -p "$(echo -e "${YELLOW}Do you want to build and start the Docker containers now? (y/n) ${NC}[Default: y]: ")" run_docker
+  read -p "$(echo -e "${YELLOW}Do you want to build and start the containers now? (y/n) ${NC}[Default: y]: ")" run_docker
   if [ -z "$run_docker" ] || [ "$run_docker" = "y" ] || [ "$run_docker" = "Y" ]; then
     echo -e "${BLUE}[*] Running: $DOCKER_CMD up -d --build${NC}"
     $DOCKER_CMD up -d --build
@@ -191,5 +215,5 @@ if [ -n "$DOCKER_CMD" ]; then
     echo -e "${YELLOW}Setup complete. You can run CodeTasker manually with: $DOCKER_CMD up -d --build${NC}"
   fi
 else
-  echo -e "${YELLOW}Setup complete. Please install Docker and run: docker compose up -d --build${NC}"
+  echo -e "${YELLOW}Setup complete. Please install Docker or Podman and run: docker compose up -d --build${NC}"
 fi

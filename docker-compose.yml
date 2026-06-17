@@ -73,8 +73,8 @@ services:
       VITE_API_BASE_URL: http://backend:8080
     volumes:
       # Mount source for hot-module replacement
-      - ./frontend/src:/app/src
-      - ./frontend/index.html:/app/index.html
+      - ./frontend/src:/app/src:z
+      - ./frontend/index.html:/app/index.html:z
     ports:
       - "5173:5173"
 

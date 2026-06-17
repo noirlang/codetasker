@@ -24,11 +24,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-w -s" -o /codetasker ./cmd/server/main.go
 
 # --- Stage 2: Production runtime ---
-FROM scratch
+FROM alpine:3.19
 
-# Copy CA certs (needed for HTTPS calls to GitHub API)
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata
+
 COPY --from=builder /codetasker /codetasker
 
 EXPOSE 8080
