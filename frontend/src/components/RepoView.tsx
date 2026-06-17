@@ -26,6 +26,7 @@ import {
   GitCommit,
   GitPullRequest,
   RefreshCw,
+  BarChart2,
 } from 'lucide-react';
 import { reposApi } from '../api/client';
 import { useTaskStore } from '../store/taskStore';
@@ -38,6 +39,7 @@ import CollaboratorManager from './CollaboratorManager';
 import CommitHistoryPanel from './CommitHistoryPanel';
 import PullRequestPanel from './PullRequestPanel';
 import ActionsPanel from './ActionsPanel';
+import RepoStatsPanel from './RepoStatsPanel';
 import Spinner from './ui/Spinner';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -219,7 +221,7 @@ export default function RepoView() {
 
   // Tabs tracking
   const [leftTab,         setLeftTab]         = useState<'files' | 'commits' | 'access'>('files');
-  const [rightTab,        setRightTab]        = useState<'tasks' | 'pulls' | 'actions'>('tasks');
+  const [rightTab,        setRightTab]        = useState<'tasks' | 'pulls' | 'actions' | 'analytics'>('tasks');
   const [pulls,           setPulls]           = useState<PullRequest[]>([]);
 
   const currentUser = useAuthStore((s) => s.user);
@@ -653,6 +655,17 @@ export default function RepoView() {
               <Activity size={11} />
               Actions
             </button>
+            <button
+              onClick={() => setRightTab('analytics')}
+              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer ${
+                rightTab === 'analytics'
+                  ? 'border-white text-white'
+                  : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+              }`}
+            >
+              <BarChart2 size={11} />
+              Analytics
+            </button>
           </div>
 
           <div className="flex-1 overflow-hidden flex flex-col">
@@ -673,11 +686,16 @@ export default function RepoView() {
                 currentBranch={currentBranch}
                 onMergeComplete={handleMergeComplete}
               />
-            ) : (
+            ) : rightTab === 'actions' ? (
               <ActionsPanel
                 owner={owner}
                 repoName={repoName}
                 currentBranch={currentBranch}
+              />
+            ) : (
+              <RepoStatsPanel
+                owner={owner}
+                repoName={repoName}
               />
             )}
           </div>

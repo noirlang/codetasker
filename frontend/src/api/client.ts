@@ -442,15 +442,11 @@ export const reposApi = {
     return data;
   },
 
-  /**
-   * Get repository task statistics.
-   * GET /api/repos/:owner/:repo/stats
-   */
   getStats: async (owner: string, repo: string): Promise<RepoStats> => {
-    const { data } = await client.get<RepoStats>(
+    const { data } = await client.get<{ stats: RepoStats }>(
       `/repos/${owner}/${repo}/stats`
     );
-    return data;
+    return data.stats;
   },
 
   /**

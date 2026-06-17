@@ -280,7 +280,20 @@ export interface CommitDetail {
   files: CommitFile[];
 }
 
-/* ── Repo Stats ────────────────────────────────────────────────── */
+export interface AssigneeStat {
+  username: string;
+  avatar_url: string;
+  total: number;
+  open: number;
+  in_progress: number;
+  resolved: number;
+}
+
+export interface DebtStat {
+  high: number;
+  medium: number;
+  low: number;
+}
 
 /** Aggregated statistics for a repository's tasks */
 export interface RepoStats {
@@ -295,6 +308,8 @@ export interface RepoStats {
     BUG?: number;
     NOTE?: number;
   };
+  by_assignee?: Record<string, AssigneeStat>;
+  debt?: DebtStat;
 }
 
 /* ── GitHub Actions ──────────────────────────────────────────── */

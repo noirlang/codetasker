@@ -1942,14 +1942,32 @@ func (rc *RepoController) GetRepoStats(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "fetch_tasks_failed", "message": err.Error()})
 	}
 
+	type AssigneeStat struct {
+		Username   string `json:"username"`
+		AvatarURL  string `json:"avatar_url"`
+		Total      int    `json:"total"`
+		Open       int    `json:"open"`
+		InProgress int    `json:"in_progress"`
+		Resolved   int    `json:"resolved"`
+	}
+
+	type DebtStat struct {
+		High   int `json:"high"`
+		Medium int `json:"medium"`
+		Low    int `json:"low"`
+	}
+
 	stats := struct {
-		Total      int            `json:"total"`
-		Open       int            `json:"open"`
-		InProgress int            `json:"in_progress"`
-		Resolved   int            `json:"resolved"`
-		ByType     map[string]int `json:"by_type"`
+		Total      int                      `json:"total"`
+		Open       int                      `json:"open"`
+		InProgress int                      `json:"in_progress"`
+		Resolved   int                      `json:"resolved"`
+		ByType     map[string]int           `json:"by_type"`
+		ByAssignee map[string]*AssigneeStat `json:"by_assignee"`
+		Debt       DebtStat                 `json:"debt"`
 	}{
-		ByType: make(map[string]int),
+		ByType:     make(map[string]int),
+		ByAssignee: make(map[string]*AssigneeStat),
 	}
 
 	for _, t := range tasks {
@@ -1964,6 +1982,39 @@ func (rc *RepoController) GetRepoStats(c *fiber.Ctx) error {
 		}
 		if t.Type != "" {
 			stats.ByType[t.Type]++
+		}
+
+		// Priority/Debt level aggregation
+		switch strings.ToUpper(t.Type) {
+		case "BUG", "FIXME":
+			stats.Debt.High++
+		case "TODO", "HACK":
+			stats.Debt.Medium++
+		case "NOTE":
+			stats.Debt.Low++
+		default:
+			stats.Debt.Low++
+		}
+
+		// Assignee aggregation
+		if t.AssigneeUsername != "" {
+			aStat, exists := stats.ByAssignee[t.AssigneeUsername]
+			if !exists {
+				aStat = &AssigneeStat{
+					Username:  t.AssigneeUsername,
+					AvatarURL: t.AssigneeAvatarURL,
+				}
+				stats.ByAssignee[t.AssigneeUsername] = aStat
+			}
+			aStat.Total++
+			switch t.Status {
+			case domain.TaskStatusOpen:
+				aStat.Open++
+			case domain.TaskStatusInProgress:
+				aStat.InProgress++
+			case domain.TaskStatusResolved:
+				aStat.Resolved++
+			}
 		}
 	}
 

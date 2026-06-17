@@ -45,6 +45,12 @@ var blockCommentPattern = regexp.MustCompile(
 	`(?i)/?\*+\s*(TODO|FIXME|HACK|BUG|NOTE)[:\s]+(.*?)\s*(?:\*/\s*)?$`,
 )
 
+// listOrIndentPattern matches lines that start with at least 2 spaces
+// or list bullets like -, *, +, or numbers like 1.
+var listOrIndentPattern = regexp.MustCompile(
+	`^(?:\s{2,}|\s*(?:[-*+]|\d+\.)\s*)`,
+)
+
 // ParsedTask holds the extracted information from a single annotation line.
 // All fields are populated by ParseFile and consumed by the task service to
 // upsert Task documents in MongoDB.
@@ -82,17 +88,33 @@ func ParseFile(fc FileContent) []ParsedTask {
 	var tasks []ParsedTask
 	lines := strings.Split(fc.Content, "\n")
 
+	var activeTask *ParsedTask
+	var activePrefix string
+	var lastCommentLine int
+
 	for i, line := range lines {
 		lineNum := i + 1 // convert to 1-based
 
 		// Try single-line comment styles first (more common).
 		if m := annotationPattern.FindStringSubmatch(line); m != nil {
+			var prefix string
+			if strings.Contains(line, "//") {
+				prefix = "//"
+			} else if strings.Contains(line, "#") {
+				prefix = "#"
+			} else if strings.Contains(line, "--") {
+				prefix = "--"
+			}
+
 			tasks = append(tasks, ParsedTask{
 				FilePath:   fc.Path,
 				LineNumber: lineNum,
 				Type:       strings.ToUpper(m[1]),
 				Content:    strings.TrimSpace(m[2]),
 			})
+			activeTask = &tasks[len(tasks)-1]
+			activePrefix = prefix
+			lastCommentLine = lineNum
 			continue
 		}
 
@@ -104,6 +126,58 @@ func ParseFile(fc FileContent) []ParsedTask {
 				Type:       strings.ToUpper(m[1]),
 				Content:    strings.TrimSpace(m[2]),
 			})
+			activeTask = &tasks[len(tasks)-1]
+			activePrefix = "/*"
+			lastCommentLine = lineNum
+			continue
+		}
+
+		// Check for multi-line continuation
+		if activeTask != nil && lineNum == lastCommentLine+1 {
+			if activePrefix == "//" || activePrefix == "#" || activePrefix == "--" {
+				idx := strings.Index(line, activePrefix)
+				if idx >= 0 {
+					afterPrefix := line[idx+len(activePrefix):]
+					if listOrIndentPattern.MatchString(afterPrefix) {
+						activeTask.Content = activeTask.Content + "\n" + strings.TrimSpace(afterPrefix)
+						lastCommentLine = lineNum
+						continue
+					}
+				}
+			} else if activePrefix == "/*" {
+				trimmed := strings.TrimSpace(line)
+				if strings.Contains(trimmed, "*/") {
+					closeIdx := strings.Index(trimmed, "*/")
+					beforeClose := trimmed[:closeIdx]
+					if strings.HasPrefix(beforeClose, "*") {
+						beforeClose = beforeClose[1:]
+					}
+					beforeClose = strings.TrimSpace(beforeClose)
+					if beforeClose != "" && listOrIndentPattern.MatchString(beforeClose) {
+						activeTask.Content = activeTask.Content + "\n" + beforeClose
+					}
+					activeTask = nil
+					activePrefix = ""
+				} else {
+					content := trimmed
+					if strings.HasPrefix(content, "*") {
+						content = content[1:]
+					}
+					checkContent := content
+					content = strings.TrimSpace(content)
+					if listOrIndentPattern.MatchString(checkContent) || strings.HasPrefix(trimmed, "*") {
+						activeTask.Content = activeTask.Content + "\n" + content
+						lastCommentLine = lineNum
+						continue
+					}
+				}
+			}
+		}
+
+		// Reset active task if this line is not a continuation
+		if activePrefix != "/*" || strings.Contains(line, "*/") {
+			activeTask = nil
+			activePrefix = ""
 		}
 	}
 
