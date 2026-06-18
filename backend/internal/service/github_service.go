@@ -304,6 +304,10 @@ func (s *GithubService) GetContents(ctx context.Context, userID primitive.Object
 		return "", fmt.Errorf("GetContents: path %q returned no content (may be a directory)", path)
 	}
 
+	if fileContent.GetSize() > 1000000 {
+		return "", fmt.Errorf("GetContents: file %q is too large to scan (%d bytes)", path, fileContent.GetSize())
+	}
+
 	decoded, err := fileContent.GetContent()
 	if err != nil {
 		return "", fmt.Errorf("GetContents decode base64: %w", err)
