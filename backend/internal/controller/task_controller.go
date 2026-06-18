@@ -459,9 +459,15 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 }
 
 // ListComments returns all comments for a task.
+// Only repository owners, maintainers, developers, and viewers may view comments.
 //
 // Route: GET /api/tasks/:id/comments
 func (tc *TaskController) ListComments(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
 	taskIDStr := c.Params("id")
 	taskObjID, err := primitive.ObjectIDFromHex(taskIDStr)
 	if err != nil {
@@ -469,6 +475,32 @@ func (tc *TaskController) ListComments(c *fiber.Ctx) error {
 			"error":   "invalid_id",
 			"message": "task ID is not a valid ObjectID",
 		})
+	}
+
+	task, err := tc.taskService.GetTaskByID(c.Context(), taskIDStr)
+	if err != nil || task == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "not_found",
+			"message": "task not found",
+		})
+	}
+
+	// Verify collaborator permissions.
+	synced, err := tc.syncedRepoRepo.FindByRepoIDOnly(c.Context(), task.RepoID)
+	if err != nil || synced == nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error":   "forbidden",
+			"message": "Repository not found or access denied",
+		})
+	}
+	if synced.UserID != userID {
+		collab, _ := tc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
+		if collab == nil {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "forbidden",
+				"message": "You do not have permissions to view comments in this repository",
+			})
+		}
 	}
 
 	comments, err := tc.commentRepo.FindByTask(c.Context(), taskObjID)
@@ -507,6 +539,24 @@ func (tc *TaskController) AddComment(c *fiber.Ctx) error {
 			"error":   "not_found",
 			"message": "task not found",
 		})
+	}
+
+	// Verify collaborator permissions.
+	synced, err := tc.syncedRepoRepo.FindByRepoIDOnly(c.Context(), task.RepoID)
+	if err != nil || synced == nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error":   "forbidden",
+			"message": "Repository not found or access denied",
+		})
+	}
+	if synced.UserID != userID {
+		collab, _ := tc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
+		if collab == nil || (collab.Role != domain.RoleOwner && collab.Role != domain.RoleMaintainer && collab.Role != domain.RoleDeveloper) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "forbidden",
+				"message": "You do not have permissions to comment on tasks in this repository",
+			})
+		}
 	}
 
 	// Parse comment body.
