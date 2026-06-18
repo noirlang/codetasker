@@ -267,7 +267,7 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 	}
 
 	// ── Handle completion tracking (when status becomes resolved) ──────────────
-	if req.Status == domain.TaskStatusResolved {
+	if req.Status == domain.TaskStatusResolved && task.Status != domain.TaskStatusResolved {
 		completingUser, _ := tc.userRepo.FindByObjectID(c.Context(), userID)
 		completingUsername := ""
 		completingAvatarURL := ""
