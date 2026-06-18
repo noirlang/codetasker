@@ -160,3 +160,30 @@ func (r *UserRepository) UpdateEmail(ctx context.Context, id primitive.ObjectID,
 	}
 	return nil
 }
+
+// FindByObjectIDs retrieves multiple users by their MongoDB ObjectIDs in a single query.
+// It returns a map of UserID -> *domain.User for easy lookup.
+func (r *UserRepository) FindByObjectIDs(ctx context.Context, ids []primitive.ObjectID) (map[primitive.ObjectID]*domain.User, error) {
+	if len(ids) == 0 {
+		return map[primitive.ObjectID]*domain.User{}, nil
+	}
+
+	filter := bson.M{"_id": bson.M{"$in": ids}}
+	cursor, err := r.col.Find(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("FindByObjectIDs: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var users []domain.User
+	if err := cursor.All(ctx, &users); err != nil {
+		return nil, fmt.Errorf("FindByObjectIDs cursor decode: %w", err)
+	}
+
+	userMap := make(map[primitive.ObjectID]*domain.User)
+	for i := range users {
+		userMap[users[i].ID] = &users[i]
+	}
+
+	return userMap, nil
+}

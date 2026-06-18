@@ -44,18 +44,20 @@ func (r *TaskRepository) UpsertTask(ctx context.Context, task *domain.Task) erro
 	now := time.Now().UTC()
 
 	filter := bson.M{
-		"repo_id":     task.RepoID,
-		"file_path":   task.FilePath,
-		"line_number": task.LineNumber,
+		"repo_id":   task.RepoID,
+		"file_path": task.FilePath,
+		"content":   task.Content,
+		"type":      task.Type,
 	}
 
 	update := bson.M{
 		"$set": bson.M{
-			"repo_name":  task.RepoName,
-			"content":    task.Content,
-			"type":       task.Type,
-			"commit_sha": task.CommitSHA,
-			"updated_at": now,
+			"repo_name":           task.RepoName,
+			"line_number":         task.LineNumber,
+			"commit_sha":          task.CommitSHA,
+			"updated_at":          now,
+			"maintainer_username": task.MaintainerUsername,
+			"maintainer_email":    task.MaintainerEmail,
 		},
 		// Only written on first insert — preserves manual status changes.
 		"$setOnInsert": bson.M{
@@ -63,8 +65,6 @@ func (r *TaskRepository) UpsertTask(ctx context.Context, task *domain.Task) erro
 			"created_at":            now,
 			"created_by_username":   task.CreatedByUsername,
 			"created_by_avatar_url": task.CreatedByAvatarURL,
-			"maintainer_username":   task.MaintainerUsername,
-			"maintainer_email":      task.MaintainerEmail,
 		},
 	}
 
@@ -72,8 +72,8 @@ func (r *TaskRepository) UpsertTask(ctx context.Context, task *domain.Task) erro
 
 	_, err := r.col.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
-		return fmt.Errorf("UpsertTask (repo=%d file=%s line=%d): %w",
-			task.RepoID, task.FilePath, task.LineNumber, err)
+		return fmt.Errorf("UpsertTask (repo=%d file=%s content=%s): %w",
+			task.RepoID, task.FilePath, task.Content, err)
 	}
 
 	return nil

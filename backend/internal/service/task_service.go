@@ -73,11 +73,12 @@ type WebhookPushPayload struct {
 //   - *GithubService for fetching file contents via the GitHub API.
 //   - *zap.Logger for structured logging.
 type TaskService struct {
-	taskRepo      *repository.TaskRepository
-	userRepo      *repository.UserRepository
-	parser        *parser.Parser
-	githubService *GithubService
-	log           *zap.Logger
+	taskRepo         *repository.TaskRepository
+	userRepo         *repository.UserRepository
+	parser           *parser.Parser
+	githubService    *GithubService
+	codeOwnerService *CodeOwnerService
+	log              *zap.Logger
 }
 
 // NewTaskService constructs a TaskService with its dependencies injected.
@@ -86,14 +87,16 @@ func NewTaskService(
 	userRepo *repository.UserRepository,
 	p *parser.Parser,
 	githubService *GithubService,
+	codeOwnerService *CodeOwnerService,
 	log *zap.Logger,
 ) *TaskService {
 	return &TaskService{
-		taskRepo:      taskRepo,
-		userRepo:      userRepo,
-		parser:        p,
-		githubService: githubService,
-		log:           log,
+		taskRepo:         taskRepo,
+		userRepo:         userRepo,
+		parser:           p,
+		githubService:    githubService,
+		codeOwnerService: codeOwnerService,
+		log:              log,
 	}
 }
 
@@ -197,17 +200,20 @@ func (s *TaskService) ProcessWebhookPush(ctx context.Context, payload WebhookPus
 	// ── Upsert discovered tasks into MongoDB ──────────────────────────────────
 	now := time.Now().UTC()
 	for _, pt := range parsedTasks {
+		maintainerUsername, maintainerEmail := s.codeOwnerService.ResolveMaintainer(ctx, ownerUser.ID, owner, repo, pt.FilePath)
 		task := &domain.Task{
-			RepoID:     repoID,
-			RepoName:   repoName,
-			FilePath:   pt.FilePath,
-			LineNumber: pt.LineNumber,
-			Content:    pt.Content,
-			Type:       pt.Type,
-			Status:     domain.TaskStatusOpen,
-			CommitSHA:  commitSHA,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			RepoID:             repoID,
+			RepoName:           repoName,
+			FilePath:           pt.FilePath,
+			LineNumber:         pt.LineNumber,
+			Content:            pt.Content,
+			Type:               pt.Type,
+			Status:             domain.TaskStatusOpen,
+			CommitSHA:          commitSHA,
+			MaintainerUsername: maintainerUsername,
+			MaintainerEmail:    maintainerEmail,
+			CreatedAt:          now,
+			UpdatedAt:          now,
 		}
 
 		if err := s.taskRepo.UpsertTask(ctx, task); err != nil {
@@ -226,22 +232,59 @@ func (s *TaskService) ProcessWebhookPush(ctx context.Context, payload WebhookPus
 
 // GetTasksByRepo returns all tasks for a repository identified by its numeric
 // GitHub repository ID. Results are ordered by file path then line number.
+// Assignee details are dynamically populated from the users collection to ensure correctness.
 func (s *TaskService) GetTasksByRepo(ctx context.Context, repoID int64) ([]domain.Task, error) {
 	tasks, err := s.taskRepo.FindByRepo(ctx, repoID)
 	if err != nil {
 		return nil, fmt.Errorf("GetTasksByRepo(%d): %w", repoID, err)
 	}
 
+	// Collect unique assignee ObjectIDs
+	var assigneeIDs []primitive.ObjectID
+	for _, t := range tasks {
+		if t.AssigneeID != nil {
+			assigneeIDs = append(assigneeIDs, *t.AssigneeID)
+		}
+	}
+
+	if len(assigneeIDs) > 0 {
+		userMap, err := s.userRepo.FindByObjectIDs(ctx, assigneeIDs)
+		if err == nil {
+			for i := range tasks {
+				if tasks[i].AssigneeID != nil {
+					if user, ok := userMap[*tasks[i].AssigneeID]; ok {
+						tasks[i].AssigneeUsername = user.Username
+						tasks[i].AssigneeAvatarURL = user.AvatarURL
+					}
+				}
+			}
+		}
+	}
+
 	return tasks, nil
 }
 
 // GetTaskByID retrieves a single task by its hex ObjectID string.
+// Assignee details are dynamically populated from the users collection.
 func (s *TaskService) GetTaskByID(ctx context.Context, id string) (*domain.Task, error) {
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, fmt.Errorf("GetTaskByID: invalid task ID %q: %w", id, err)
 	}
-	return s.taskRepo.FindByID(ctx, objID)
+	task, err := s.taskRepo.FindByID(ctx, objID)
+	if err != nil || task == nil {
+		return task, err
+	}
+
+	if task.AssigneeID != nil {
+		user, err := s.userRepo.FindByObjectID(ctx, *task.AssigneeID)
+		if err == nil && user != nil {
+			task.AssigneeUsername = user.Username
+			task.AssigneeAvatarURL = user.AvatarURL
+		}
+	}
+
+	return task, nil
 }
 
 // UpdateTaskStatus changes the lifecycle status of a task identified by its
@@ -266,8 +309,8 @@ func (s *TaskService) UpdateTaskStatus(ctx context.Context, id string, status do
 		return nil, fmt.Errorf("UpdateTaskStatus: %w", err)
 	}
 
-	// Re-fetch the updated task to return the full document to the API caller.
-	task, err := s.taskRepo.FindByID(ctx, objID)
+	// Re-fetch the updated task dynamically to return the full document to the API caller.
+	task, err := s.GetTaskByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("UpdateTaskStatus re-fetch: %w", err)
 	}
@@ -299,7 +342,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, id string, status domain.T
 		return nil, fmt.Errorf("UpdateTask: %w", err)
 	}
 
-	task, err := s.taskRepo.FindByID(ctx, objID)
+	// Re-fetch the updated task dynamically
+	task, err := s.GetTaskByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("UpdateTask re-fetch: %w", err)
 	}
@@ -443,20 +487,23 @@ func (s *TaskService) SyncTasks(ctx context.Context, userID primitive.ObjectID, 
 	}
 
 	for _, pt := range parsedTasks {
-		key := fmt.Sprintf("%s:%d", pt.FilePath, pt.LineNumber)
+		key := fmt.Sprintf("%s:%s:%s", pt.FilePath, pt.Type, pt.Content)
 		scannedKeys[key] = true
 
+		maintainerUsername, maintainerEmail := s.codeOwnerService.ResolveMaintainer(ctx, userID, owner, repo, pt.FilePath)
 		task := &domain.Task{
-			RepoID:     repoID,
-			RepoName:   repoName,
-			FilePath:   pt.FilePath,
-			LineNumber: pt.LineNumber,
-			Content:    pt.Content,
-			Type:       pt.Type,
-			Status:     domain.TaskStatusOpen,
-			CommitSHA:  commitSHA,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			RepoID:             repoID,
+			RepoName:           repoName,
+			FilePath:           pt.FilePath,
+			LineNumber:         pt.LineNumber,
+			Content:            pt.Content,
+			Type:               pt.Type,
+			Status:             domain.TaskStatusOpen,
+			CommitSHA:          commitSHA,
+			MaintainerUsername: maintainerUsername,
+			MaintainerEmail:    maintainerEmail,
+			CreatedAt:          now,
+			UpdatedAt:          now,
 		}
 
 		if err := s.taskRepo.UpsertTask(ctx, task); err != nil {
@@ -475,7 +522,7 @@ func (s *TaskService) SyncTasks(ctx context.Context, userID primitive.ObjectID, 
 	}
 
 	for _, extTask := range existingTasks {
-		key := fmt.Sprintf("%s:%d", extTask.FilePath, extTask.LineNumber)
+		key := fmt.Sprintf("%s:%s:%s", extTask.FilePath, extTask.Type, extTask.Content)
 		if !scannedKeys[key] {
 			if err := s.taskRepo.DeleteTask(ctx, extTask.ID); err != nil {
 				s.log.Error("SyncTasks: failed to delete stale task",

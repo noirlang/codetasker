@@ -88,7 +88,7 @@ func main() {
 	emailService := service.NewEmailService(cfg, log)
 	codeOwnerService := service.NewCodeOwnerService(githubService, userRepo, log)
 	todoParser := parser.NewParser()
-	taskService := service.NewTaskService(taskRepo, userRepo, todoParser, githubService, log)
+	taskService := service.NewTaskService(taskRepo, userRepo, todoParser, githubService, codeOwnerService, log)
 
 	// Controllers
 	authCtrl := controller.NewAuthController(authService)
