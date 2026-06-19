@@ -20,12 +20,49 @@ It is designed for engineering organizations of all sizes to eliminate technical
 
 ## Features
 
-- **Push-to-Sync (Code to Board):** Adding or removing a TODO comment in your files automatically creates, updates, or completes tasks on the CodeTasker Kanban board.
-- **Task Injection (Board to Code):** Assign and inject tasks directly into your codebase from the board. CodeTasker creates a dedicated branch, inserts the comment at the exact line with the correct language syntax, and opens a GitHub Pull Request.
-- **Language-Sensitive Commenting:** Automatically detects file extensions to write syntactically correct comment blocks (e.g., `//` for Go/TypeScript, `#` for Python/Ruby, `--` for SQL).
-- **Collaborative History:** Manage repository collaborators, roles (Viewer, Developer, Maintainer), view branch commit diffs, and inspect build Actions in real-time.
-- **GitHub Webhook Sync:** Securely sync branch updates via verified SHA256 HMAC signature webhooks.
-- **Security-First Architecture:** Stored GitHub access tokens are encrypted in transit and rest using AES-256-GCM. Session state is managed via secure, HttpOnly, SameSite cookies.
+Here is a detailed breakdown of the features provided by CodeTasker. You can place screenshots inside the placeholders below:
+
+### 1. Push-to-Sync (Code to Board)
+Automatically converts inline code comments (`// TODO:`, `// FIXME:`, `// BUG:`, `// HACK:`, `// NOTE:`) into interactive tasks. Pushing changes to GitHub immediately syncs the task status on the board without manual intervention.
+* **How it works:** Webhook listener processes git commits, taranır and updates MongoDB records.
+* **Placeholder:**
+  ![Push-to-Sync Screen](./screenshots/push_to_sync.png)
+
+### 2. Task Board (Kanban & List View)
+Manage your codebase tasks with a highly interactive Kanban board. Tasks are grouped in columns (`Open`, `In Progress`, `Resolved`) with smooth drag-and-drop operations, or a clean file-grouped list view.
+* **How it works:** Enabled with drag-and-drop support, customizable columns, and real-time status syncing.
+* **Placeholder:**
+  ![Task Board Screen](./screenshots/task_board.png)
+
+### 3. Task Injection (Board to Code)
+Inject tasks directly into your codebase from the UI. CodeTasker automatically detects the file extension, writes the comment using the correct language syntax, creates a dedicated branch, and opens a GitHub Pull Request.
+* **How it works:** Leverages low-level GitHub Git Trees and Blobs API for non-disruptive, exact-line commenting.
+* **Placeholder:**
+  ![Task Injection Screen](./screenshots/task_injection.png)
+
+### 4. PR Management & Direct Merge
+Review and merge open GitHub Pull Requests directly from the CodeTasker panel. Supports different merge options: standard merge commits, squash and merge, or rebase and merge.
+* **How it works:** Uses GitHub PullRequests Merge API to execute merges directly from the UI with custom titles and messages.
+* **Placeholder:**
+  ![PR Direct Merge Screen](./screenshots/pr_merge.png)
+
+### 5. CODEOWNERS & Maintainer Routing
+Automatically routes task ownership using your repository's `.github/CODEOWNERS` rules. When a task in a specific directory is created or completed, notifications are automatically routed to the responsible developer.
+* **How it works:** Resolves responsibilities line-by-line using GitHub glob pattern matching on push/sync triggers.
+* **Placeholder:**
+  ![CODEOWNERS Routing Screen](./screenshots/codeowners.png)
+
+### 6. Telegram & Email Notifications (Multi-Channel Alerts)
+In addition to email notifications, users can configure their own custom Telegram Bots. Users register their bot tokens and Chat IDs in their profile settings to receive instant push alerts when assigned a task, mentioned, or when a task is completed.
+* **How it works:** Integrates transactional SMTP delivery with Telegram Bot sendMessage API webhooks.
+* **Placeholder:**
+  ![Notifications Configuration Screen](./screenshots/notifications.png)
+
+### 7. Collaborators & Role Access Control
+Manage repository access by setting custom roles (Viewer, Developer, Maintainer) inside CodeTasker to align team permissions, while verifying write access checks on GitHub.
+* **How it works:** Secures mutations using middleware-level JWT credentials matched against MongoDB synced collaborator indices.
+* **Placeholder:**
+  ![Collaborator Settings Screen](./screenshots/collaborators.png)
 
 ## System Architecture
 
