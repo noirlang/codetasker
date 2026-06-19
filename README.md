@@ -18,52 +18,52 @@ CodeTasker is an intelligent task synchronization platform that bridges the gap 
 
 It is designed for engineering organizations of all sizes to eliminate technical debt tracking overhead and keep tasks perfectly in sync with the actual code.
 
-## Özellikler (Features)
+## Features
 
-CodeTasker platformunun sunduğu temel özellikler ve ekran görüntüleriyle gerçek kullanım senaryoları aşağıda açıklanmıştır:
+Below is a detailed breakdown of the features provided by CodeTasker, explaining how each tool and system works to automate and streamline your workflow:
 
-### 1. Push-to-Sync (Koddaki Yorumlardan Görev Panosuna)
-Kod tabanınızda yer alan satır içi yorumlar (`# TODO:`, `# FIXME:`, `# BUG:`, vb.) otomatik olarak taranır ve interaktif görevlere dönüştürülür. GitHub'a yapılan push işlemleri, panodaki görev durumlarını anında senkronize eder.
-* **Görsel Tanımı:** Ruby dosyasındaki (`main.rb`) yorum satırlarının taranarak sağ taraftaki "Tasks" sekmesinde "OPEN" kolonunda listelenmesi.
-* **Ekran Görüntüsü:**
+### 1. Push-to-Sync (Code to Board)
+Automatically detects inline comments (like `// TODO:`, `// FIXME:`, `// BUG:`, `// HACK:`, `// NOTE:`) in your codebase whenever you push changes to GitHub. These comments are parsed and immediately synchronized as interactive tasks on your Kanban board.
+* **How it works:** A webhook listener captures git commit pushes, analyzes files for annotation keywords, and registers or updates their lifecycle status inside MongoDB.
+* **Visual Reference:**
   ![Push-to-Sync Screen](./screenshot/Ekran%20G%C3%B6r%C3%BCnt%C3%BCs%C3%BC%202026-06-19%2014-29-38.png)
 
-### 2. Dashboard ve Senkronize Repolar (Dashboard & Synced Repos)
-Kullanıcının sahip olduğu tüm GitHub depolarını yönetebildiği ana kontrol paneli ve CodeTasker ile aktif olarak senkronize edilmiş depoların listelendiği yönetim ekranı. Sağ üst menüden kişisel repolar ve organizasyonlar arasında kolayca geçiş yapılabilir.
-* **Görsel Tanımı:** Sahip olunan tüm repoların listelendiği "Dashboard" ekranı ve aktif senkronize repoların (`codetester-test`, `worm-next`) gösterildiği "Synced Repos" arayüzü.
-* **Ekran Görüntüleri:**
+### 2. Centralized Dashboard & Synced Repositories
+Allows developers to view, filter, and manage all their connected repositories in one place. You can filter repositories by user or organization account, view active configurations, and instantly manage webhook sync options.
+* **How it works:** Fetches repositories dynamically via the GitHub API, caching basic metadata in MongoDB while providing toggles to quickly install or remove webhooks on selected repositories.
+* **Visual References:**
   ![Dashboard Screen](./screenshot/Ekran%20G%C3%B6r%C3%BCnt%C3%BCs%C3%BC%202026-06-19%2014-31-02.png)
   ![Synced Repos Screen](./screenshot/Ekran%20G%C3%B6r%C3%BCnt%C3%BCs%C3%BC%202026-06-19%2014-31-07.png)
 
-### 3. Görev Enjeksiyonu (Task Injection - Panodan Koda)
-Uygulama arayüzünden doğrudan hedef koda yeni bir görev (inline comment) ekleyebilirsiniz. CodeTasker dosya uzantısını algılar, dilin yorum satırı sözdizimine uygun olarak yorumu yazar, yeni bir branch açar ve otomatik Pull Request oluşturur.
-* **Görsel Tanımı:** Arayüzdeki "Inject TODO" yan paneli kullanılarak `main.rb` dosyasının 5. satırına doğrudan yeni bir `TODO` görevinin ve otomatik PR'ının eklenmesi aşaması.
-* **Ekran Görüntüsü:**
+### 3. Task Injection (Board to Code)
+Allows developers to inject inline code tasks directly into a file from the web UI. CodeTasker detects the file extension, structures the comment with the appropriate syntax (e.g. `# TODO:` for Ruby/Python, `// TODO:` for JavaScript/Go), writes it to the designated line, creates a new Git branch, and opens a GitHub Pull Request.
+* **How it works:** Leverages GitHub Git Trees and Blobs API to write comments directly into targeted repository files on a newly created branch without messing up local workspace states.
+* **Visual Reference:**
   ![Task Injection Screen](./screenshot/Ekran%20G%C3%B6r%C3%BCnt%C3%BCs%C3%BC%202026-06-19%2014-30-00.png)
 
-### 4. PR Yönetimi ve Doğrudan Birleştirme (PR Management & Direct Merge)
-Koda enjekte edilen görevler için açılan Pull Request'ler CodeTasker paneli üzerinden doğrudan yönetilebilir ve birleştirilebilir (merge).
-* **Görsel Tanımı:** Sağ paneldeki "Pull Requests" sekmesi altında daha önce koda eklenmiş ve birleştirilerek kapatılmış (`closed`) olan otomatik Pull Request listesi.
-* **Ekran Görüntüsü:**
+### 4. PR Management & Direct Merge
+Provides a dedicated pane to monitor, review, and merge Pull Requests created by task injections. It simplifies the review cycle by allowing maintainers to execute merges directly from the app interface.
+* **How it works:** Employs the GitHub PullRequests Merge API to execute merges (using standard, rebase, or squash options) without leaving the CodeTasker panel.
+* **Visual Reference:**
   ![PR Direct Merge Screen](./screenshot/Ekran%20G%C3%B6r%C3%BCnt%C3%BCs%C3%BC%202026-06-19%2014-30-29.png)
 
-### 5. Görev Detayları ve Yorumlaşma (Task Details & Collaboration)
-Oluşturulan görevlerin atamaları ve ekip içi yazışmalar görev detay paneli üzerinden gerçekleştirilir.
-* **Görsel Tanımı:** Bir görev detayına tıklandığında açılan yan panelde görevin `melihemik` kullanıcısına atanması ve görev altındaki yorum geçmişinin görüntülenmesi.
-* **Ekran Görüntüsü:**
+### 5. Task Details & Team Collaboration
+Allows team members to open any task, view its file location, change the assignee, modify tags, and collaborate directly on the issue via an interactive comments thread.
+* **How it works:** Saves issue assignees and comments in MongoDB, linking task IDs with project collaborators to keep discussions unified.
+* **Visual Reference:**
   ![Task Details Screen](./screenshot/Ekran%20G%C3%B6r%C3%BCnt%C3%BCs%C3%BC%202026-06-19%2014-30-14.png)
 
-### 6. Telegram ve E-posta Bildirimleri (Telegram & Email Notifications)
-Kullanıcılar kendilerine görev atandığında, bir görev tamamlandığında veya yorum yapıldığında anlık bildirim alırlar. Telegram bildirimleri için ayarlar sayfasından kullanıcıların kendi oluşturdukları bot tokenini ve Chat ID bilgilerini girmeleri yeterlidir.
-* **Görsel Tanımı:** Kullanıcı ayarları sayfasındaki Telegram ve E-posta yapılandırma alanları ile bir kullanıcıya görev atandığında gönderilen şablon bildirim e-postası.
-* **Ekran Görüntüleri:**
+### 6. Multi-Channel Notifications (Telegram & Email Alerts)
+Sends instant, real-time alerts through email and Telegram whenever a task is created, assigned, commented on, or completed. Users configure their custom Telegram bots inside settings to receive these alerts directly on mobile or desktop Telegram apps.
+* **How it works:** Combines a transactional SMTP email engine with Telegram Bot's `sendMessage` API to deliver webhook-triggered notifications.
+* **Visual References:**
   ![Telegram Configuration Screen](./screenshot/Ekran%20G%C3%B6r%C3%BCnt%C3%BCs%C3%BC%202026-06-19%2014-31-18.png)
   ![Email Notification Template Screen](./screenshot/Ekran%20G%C3%B6r%C3%BCnt%C3%BCs%C3%BC%202026-06-19%2014-31-31.png)
 
-### 7. İş Birlikçiler ve Rol Yetkilendirme (Collaborators & Role Access Control)
-Depo bazlı işbirlikçilerin ve yetki düzeylerinin (Owner, Maintainer, Developer) yönetilmesini sağlar.
-* **Görsel Tanımı:** "Repository Collaborators" yan paneli üzerinden depodaki işbirlikçilerin listelenmesi, rollerinin güncellenmesi ve yeni üye ekleme ekranı.
-* **Ekran Görüntüsü:**
+### 7. Collaborators & Role-Based Access Control (RBAC)
+Secures repository task boards by assigning specific workspace permissions (Viewer, Developer, Maintainer) to collaborators. It guarantees that only authorized users can perform write operations, modify tasks, or merge pull requests.
+* **How it works:** Implements authorization checks within backend routes using JWT credentials mapped against synced repository contributor permissions.
+* **Visual Reference:**
   ![Collaborators Screen](./screenshot/Ekran%20G%C3%B6r%C3%BCnt%C3%BCs%C3%BC%202026-06-19%2014-30-46.png)
 
 ## System Architecture
