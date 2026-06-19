@@ -83,12 +83,18 @@ export const authApi = {
     return data;
   },
 
-  /**
-   * Update the authenticated user's profile settings (such as email).
-   * PATCH /api/auth/me
-   */
-  updateMe: async (email: string): Promise<{ user: User; message: string }> => {
-    const { data } = await client.patch<{ user: User; message: string }>('/auth/me', { email });
+  updateMe: async (
+    email: string,
+    telegramBotToken?: string,
+    telegramChatID?: string,
+    telegramEnabled?: boolean
+  ): Promise<{ user: User; message: string }> => {
+    const { data } = await client.patch<{ user: User; message: string }>('/auth/me', {
+      email,
+      telegram_bot_token: telegramBotToken,
+      telegram_chat_id: telegramChatID,
+      telegram_enabled: telegramEnabled,
+    });
     return data;
   },
 

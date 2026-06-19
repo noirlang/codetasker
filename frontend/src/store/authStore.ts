@@ -34,8 +34,13 @@ interface AuthState {
    */
   logout: () => Promise<void>;
 
-  /** Update the authenticated user's email address in local state and backend. */
-  updateEmail: (email: string) => Promise<void>;
+  /** Update the authenticated user's profile settings in local state and backend. */
+  updateProfile: (
+    email: string,
+    telegramBotToken?: string,
+    telegramChatID?: string,
+    telegramEnabled?: boolean
+  ) => Promise<void>;
 }
 
 // ── Store implementation ───────────────────────────────────────────────────
@@ -67,9 +72,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  updateEmail: async (email: string) => {
+  updateProfile: async (
+    email: string,
+    telegramBotToken?: string,
+    telegramChatID?: string,
+    telegramEnabled?: boolean
+  ) => {
     try {
-      const res = await authApi.updateMe(email);
+      const res = await authApi.updateMe(email, telegramBotToken, telegramChatID, telegramEnabled);
       set({ user: res.user });
     } catch (err) {
       throw err;

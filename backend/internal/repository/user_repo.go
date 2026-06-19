@@ -142,18 +142,21 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 	return &user, nil
 }
 
-// UpdateEmail updates the email address of a user in the database.
-func (r *UserRepository) UpdateEmail(ctx context.Context, id primitive.ObjectID, email string) error {
+// UpdateProfile updates the profile settings (email, telegram token, telegram chat id, telegram enabled) of a user in the database.
+func (r *UserRepository) UpdateProfile(ctx context.Context, id primitive.ObjectID, email, telegramBotToken, telegramChatID string, telegramEnabled bool) error {
 	filter := bson.M{"_id": id}
 	update := bson.M{
 		"$set": bson.M{
-			"email":      email,
-			"updated_at": time.Now().UTC(),
+			"email":               email,
+			"telegram_bot_token":  telegramBotToken,
+			"telegram_chat_id":    telegramChatID,
+			"telegram_enabled":    telegramEnabled,
+			"updated_at":          time.Now().UTC(),
 		},
 	}
 	res, err := r.col.UpdateOne(ctx, filter, update)
 	if err != nil {
-		return fmt.Errorf("UpdateEmail(%s): %w", id.Hex(), err)
+		return fmt.Errorf("UpdateProfile(%s): %w", id.Hex(), err)
 	}
 	if res.MatchedCount == 0 {
 		return fmt.Errorf("user %s not found", id.Hex())

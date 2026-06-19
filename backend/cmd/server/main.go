@@ -90,11 +90,13 @@ func main() {
 	todoParser := parser.NewParser()
 	taskService := service.NewTaskService(taskRepo, userRepo, todoParser, githubService, codeOwnerService, log)
 
+	telegramService := service.NewTelegramService(log)
+
 	// Controllers
 	authCtrl := controller.NewAuthController(authService)
 	repoCtrl := controller.NewRepoController(cfg, githubService, taskService, syncedRepo, collaboratorRepo, userRepo, activityRepo, taskRepo)
 	webhookCtrl := controller.NewWebhookController(taskService)
-	taskCtrl := controller.NewTaskController(taskService, githubService, syncedRepo, collaboratorRepo, commentRepo, notifRepo, activityRepo, userRepo, emailService, codeOwnerService, taskRepo)
+	taskCtrl := controller.NewTaskController(taskService, githubService, syncedRepo, collaboratorRepo, commentRepo, notifRepo, activityRepo, userRepo, emailService, codeOwnerService, telegramService, taskRepo)
 	notifCtrl := controller.NewNotificationController(notifRepo)
 
 	// ── Step 6: Configure Fiber ──────────────────────────────────────────────

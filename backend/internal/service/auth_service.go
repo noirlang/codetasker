@@ -193,8 +193,8 @@ func (s *AuthService) GetUserByID(ctx context.Context, id primitive.ObjectID) (*
 	return user, nil
 }
 
-// UpdateUserEmail updates the email address of a user by ObjectID.
-func (s *AuthService) UpdateUserEmail(ctx context.Context, id primitive.ObjectID, email string) error {
-	return s.userRepo.UpdateEmail(ctx, id, email)
+// UpdateUserProfile updates the profile settings of a user by ObjectID.
+func (s *AuthService) UpdateUserProfile(ctx context.Context, id primitive.ObjectID, email, telegramBotToken, telegramChatID string, telegramEnabled bool) error {
+	return s.userRepo.UpdateProfile(ctx, id, email, telegramBotToken, telegramChatID, telegramEnabled)
 }
 

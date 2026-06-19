@@ -30,6 +30,7 @@ type TaskController struct {
 	userRepo         *repository.UserRepository
 	emailService     *service.EmailService
 	codeOwnerService *service.CodeOwnerService
+	telegramService  *service.TelegramService
 	// taskRepo is kept for direct UpdateAssignee calls.
 	taskRepo *repository.TaskRepository
 }
@@ -46,6 +47,7 @@ func NewTaskController(
 	userRepo *repository.UserRepository,
 	emailService *service.EmailService,
 	codeOwnerService *service.CodeOwnerService,
+	telegramService *service.TelegramService,
 	taskRepo *repository.TaskRepository,
 ) *TaskController {
 	return &TaskController{
@@ -59,6 +61,7 @@ func NewTaskController(
 		userRepo:         userRepo,
 		emailService:     emailService,
 		codeOwnerService: codeOwnerService,
+		telegramService:  telegramService,
 		taskRepo:         taskRepo,
 	}
 }
@@ -264,6 +267,19 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 			task.RepoName,
 			"",
 		)
+
+		// Send Telegram notification (non-fatal if not configured).
+		if assignee.TelegramEnabled && assignee.TelegramBotToken != "" && assignee.TelegramChatID != "" {
+			_ = tc.telegramService.SendTaskAssigned(
+				c.Context(),
+				assignee.TelegramBotToken,
+				assignee.TelegramChatID,
+				assignee.Username,
+				actorName,
+				task.Content,
+				task.RepoName,
+			)
+		}
 	}
 
 	// ── Handle completion tracking (when status becomes resolved) ──────────────
@@ -302,6 +318,20 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 					Message: fmt.Sprintf("Task resolved by %s: %s", completingUsername, task.Content),
 					Link:    fmt.Sprintf("/repos/%s/tasks", task.RepoName),
 				})
+
+				// Send Telegram notification to maintainer
+				if maintainerUser.TelegramEnabled && maintainerUser.TelegramBotToken != "" && maintainerUser.TelegramChatID != "" {
+					_ = tc.telegramService.SendTaskCompleted(
+						c.Context(),
+						maintainerUser.TelegramBotToken,
+						maintainerUser.TelegramChatID,
+						maintainerUser.Username,
+						completingUsername,
+						task.Content,
+						task.RepoName,
+						task.FilePath,
+					)
+				}
 			}
 		}
 	}
@@ -613,6 +643,20 @@ func (tc *TaskController) AddComment(c *fiber.Ctx) error {
 				task.RepoName,
 				"",
 			)
+
+			// Send Telegram notification to the assignee
+			if assignee.TelegramEnabled && assignee.TelegramBotToken != "" && assignee.TelegramChatID != "" {
+				_ = tc.telegramService.SendCommentNotification(
+					c.Context(),
+					assignee.TelegramBotToken,
+					assignee.TelegramChatID,
+					assignee.Username,
+					commenter.Username,
+					task.Content,
+					req.Content,
+					task.RepoName,
+				)
+			}
 		}
 	}
 

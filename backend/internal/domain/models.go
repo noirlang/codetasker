@@ -56,6 +56,11 @@ type User struct {
 
 	// UpdatedAt is refreshed on every upsert (e.g. token refresh).
 	UpdatedAt time.Time `bson:"updated_at" json:"updated_at"`
+
+	// Telegram integration settings
+	TelegramBotToken string `bson:"telegram_bot_token,omitempty" json:"telegram_bot_token,omitempty"`
+	TelegramChatID   string `bson:"telegram_chat_id,omitempty" json:"telegram_chat_id,omitempty"`
+	TelegramEnabled  bool   `bson:"telegram_enabled" json:"telegram_enabled"`
 }
 
 // Task represents a single TODO/FIXME/HACK/BUG/NOTE annotation found in a

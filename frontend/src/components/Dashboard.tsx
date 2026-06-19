@@ -26,6 +26,7 @@ import {
   Mail,
   AlertTriangle,
   Users,
+  Send,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ScrollReveal from 'scrollreveal';
@@ -343,30 +344,54 @@ function SettingsContent({
 }) {
   const syncedCount = repos.filter((repo) => repo.is_synced).length;
   const privateCount = repos.filter((repo) => repo.private).length;
-  const { updateEmail } = useAuthStore();
+  const { updateProfile } = useAuthStore();
 
   const [email, setEmail] = useState(user?.email || '');
+  const [telegramBotToken, setTelegramBotToken] = useState(user?.telegram_bot_token || '');
+  const [telegramChatID, setTelegramChatID] = useState(user?.telegram_chat_id || '');
+  const [telegramEnabled, setTelegramEnabled] = useState(user?.telegram_enabled || false);
+
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const [telegramSaving, setTelegramSaving] = useState(false);
+  const [telegramMessage, setTelegramMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   // Sync internal state when user profile is loaded/updated
   useEffect(() => {
-    if (user?.email) {
-      setEmail(user.email);
+    if (user) {
+      setEmail(user.email || '');
+      setTelegramBotToken(user.telegram_bot_token || '');
+      setTelegramChatID(user.telegram_chat_id || '');
+      setTelegramEnabled(user.telegram_enabled || false);
     }
-  }, [user?.email]);
+  }, [user]);
 
   const handleSaveEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setMessage(null);
     try {
-      await updateEmail(email);
+      await updateProfile(email, telegramBotToken, telegramChatID, telegramEnabled);
       setMessage({ type: 'success', text: 'Email settings saved successfully.' });
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Failed to save email settings.' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveTelegram = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTelegramSaving(true);
+    setTelegramMessage(null);
+    try {
+      await updateProfile(email, telegramBotToken, telegramChatID, telegramEnabled);
+      setTelegramMessage({ type: 'success', text: 'Telegram settings saved successfully.' });
+    } catch (err: any) {
+      setTelegramMessage({ type: 'error', text: err.message || 'Failed to save Telegram settings.' });
+    } finally {
+      setTelegramSaving(false);
     }
   };
 
@@ -415,6 +440,62 @@ function SettingsContent({
           {message && (
             <p className={`text-xs ${message.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
               {message.text}
+            </p>
+          )}
+        </form>
+      </DashboardInfoCard>
+
+      <DashboardInfoCard icon={Send} title="Telegram notifications">
+        <form onSubmit={handleSaveTelegram} className="flex flex-col gap-4">
+          <p className="text-xs text-[#a0a0a0] leading-relaxed">
+            Configure a Telegram bot to receive instant push notifications. Create a bot via <b>@BotFather</b> on Telegram to get your token, and get your <b>Chat ID</b> (e.g. using @userinfobot).
+          </p>
+          
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-mono text-[#666666] uppercase">Bot Token</label>
+              <input
+                type="password"
+                value={telegramBotToken}
+                onChange={(e) => setTelegramBotToken(e.target.value)}
+                placeholder="123456789:ABCdefGhI..."
+                className="input text-xs"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-mono text-[#666666] uppercase">Chat ID</label>
+              <input
+                type="text"
+                value={telegramChatID}
+                onChange={(e) => setTelegramChatID(e.target.value)}
+                placeholder="e.g. 987654321"
+                className="input text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-[#222222] pt-4">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-[#a0a0a0]">
+              <input
+                type="checkbox"
+                checked={telegramEnabled}
+                onChange={(e) => setTelegramEnabled(e.target.checked)}
+                className="rounded border-[#3a3a3a] bg-[#111111] text-white focus:ring-0"
+              />
+              Enable Telegram notifications
+            </label>
+            <button
+              type="submit"
+              disabled={telegramSaving}
+              className="btn-primary text-xs py-2 px-4"
+            >
+              {telegramSaving ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+
+          {telegramMessage && (
+            <p className={`text-xs ${telegramMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+              {telegramMessage.text}
             </p>
           )}
         </form>

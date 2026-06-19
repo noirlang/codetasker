@@ -224,7 +224,10 @@ func (ac *AuthController) UpdateMe(c *fiber.Ctx) error {
 	}
 
 	type updateMeRequest struct {
-		Email string `json:"email"`
+		Email            string `json:"email"`
+		TelegramBotToken string `json:"telegram_bot_token"`
+		TelegramChatID   string `json:"telegram_chat_id"`
+		TelegramEnabled  bool   `json:"telegram_enabled"`
 	}
 
 	var req updateMeRequest
@@ -235,7 +238,7 @@ func (ac *AuthController) UpdateMe(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := ac.authService.UpdateUserEmail(c.Context(), userID, req.Email); err != nil {
+	if err := ac.authService.UpdateUserProfile(c.Context(), userID, req.Email, req.TelegramBotToken, req.TelegramChatID, req.TelegramEnabled); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "update_failed",
 			"message": err.Error(),
