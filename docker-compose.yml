@@ -1,9 +1,13 @@
-version: "3.9"
-
 # ============================================================
-# CodeTasker — Docker Compose
-# Starts: MongoDB + Go Fiber backend + React Vite frontend
-# Usage: docker-compose up --build
+# CodeTasker — Docker Compose (Production)
+#
+# USAGE:
+#   docker compose up -d --build    → Build & start everything
+#   docker compose down             → Stop everything
+#   docker compose logs -f          → Watch logs
+#
+# REQUIREMENTS:
+#   Copy .env.example to .env and fill in your credentials.
 # ============================================================
 
 services:
@@ -19,13 +23,13 @@ services:
       MONGO_INITDB_DATABASE: codetasker
     volumes:
       - mongo_data:/data/db
-    ports:
-      - "27017:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - codetasker_net
 
   # ----------------------------------------------------------
   # Go Fiber Backend API
@@ -34,22 +38,16 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: codetasker-backend
     container_name: codetasker_backend
     restart: unless-stopped
     depends_on:
       mongo:
         condition: service_healthy
+    env_file: .env
     environment:
       PORT: 8080
       MONGO_URI: mongodb://mongo:27017
-      DB_NAME: codetasker
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
-      GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost:8080/api/auth/github/callback}
-      JWT_SECRET: ${JWT_SECRET}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
-      TOKEN_ENCRYPT_KEY: ${TOKEN_ENCRYPT_KEY}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     ports:
       - "8080:8080"
     healthcheck:
@@ -57,26 +55,30 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
+    networks:
+      - codetasker_net
 
   # ----------------------------------------------------------
-  # React Vite Frontend (dev mode with HMR)
+  # React Frontend — Production build served via Nginx
   # ----------------------------------------------------------
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
+    image: codetasker-frontend
     container_name: codetasker_frontend
     restart: unless-stopped
     depends_on:
-      - backend
-    environment:
-      VITE_API_BASE_URL: http://backend:8080
-    volumes:
-      # Mount source for hot-module replacement
-      - ./frontend/src:/app/src:z
-      - ./frontend/index.html:/app/index.html:z
+      backend:
+        condition: service_healthy
     ports:
-      - "5173:5173"
+      - "80:80"
+    networks:
+      - codetasker_net
+
+networks:
+  codetasker_net:
+    driver: bridge
 
 volumes:
   mongo_data:

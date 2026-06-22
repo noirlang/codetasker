@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 FROM alpine:3.19
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata wget
 
 COPY --from=builder /codetasker /codetasker
 
