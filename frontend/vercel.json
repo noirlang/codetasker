@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://YOUR_RENDER_BACKEND_URL/api/:path*"
+      "destination": "https://codetasker.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
