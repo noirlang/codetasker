@@ -31,7 +31,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import ScrollReveal from 'scrollreveal';
 import { useAuthStore } from '../store/authStore';
-import { reposApi } from '../api/client';
+import { reposApi, systemApi } from '../api/client';
 import type { Repo, ApiError, Organization, User } from '../types';
 import Spinner from './ui/Spinner';
 
@@ -357,6 +357,28 @@ function SettingsContent({
   const [telegramSaving, setTelegramSaving] = useState(false);
   const [telegramMessage, setTelegramMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const [smtpEnabled, setSmtpEnabled] = useState<boolean | null>(null);
+
+  // Load system config for SMTP status
+  useEffect(() => {
+    let isMounted = true;
+    systemApi.getConfig()
+      .then((cfg) => {
+        if (isMounted) {
+          setSmtpEnabled(cfg.smtp_enabled);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load system config:', err);
+        if (isMounted) {
+          setSmtpEnabled(true); // Fallback to true so we don't block users if endpoint fails
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Sync internal state when user profile is loaded/updated
   useEffect(() => {
     if (user) {
@@ -426,17 +448,26 @@ function SettingsContent({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="e.g. name@company.com"
-              className="input flex-1"
+              className={`input flex-1 ${smtpEnabled === false ? 'opacity-50 cursor-not-allowed' : ''}`}
               required
+              disabled={smtpEnabled === false}
             />
             <button
               type="submit"
-              disabled={saving}
-              className="btn-primary shrink-0 text-xs py-2 px-3"
+              disabled={saving || smtpEnabled === false}
+              className={`btn-primary shrink-0 text-xs py-2 px-3 ${smtpEnabled === false ? 'opacity-50 cursor-not-allowed bg-neutral-800 border-neutral-700 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-500' : ''}`}
             >
               {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
+          {smtpEnabled === false && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex-1 leading-relaxed">
+                <strong>SMTP is disabled on the server:</strong> Email notifications are currently unavailable. You can use <strong>Telegram notifications</strong> instead by configuring the bot details on the right.
+              </div>
+            </div>
+          )}
           {message && (
             <p className={`text-xs ${message.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
               {message.text}

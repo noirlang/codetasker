@@ -107,6 +107,19 @@ export const authApi = {
   },
 };
 
+// ── System API ──────────────────────────────────────────────────────────────
+
+export const systemApi = {
+  /**
+   * Get public configuration metadata (e.g. SMTP status).
+   * GET /api/config
+   */
+  getConfig: async (): Promise<{ smtp_enabled: boolean }> => {
+    const { data } = await client.get<{ smtp_enabled: boolean }>('/config');
+    return data;
+  },
+};
+
 // ── Repositories API ───────────────────────────────────────────────────────
 
 export const reposApi = {

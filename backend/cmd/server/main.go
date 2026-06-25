@@ -155,6 +155,13 @@ func main() {
 		})
 	})
 
+	// Public system configuration metadata.
+	app.Get("/api/config", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"smtp_enabled": cfg.SMTPEnabled,
+		})
+	})
+
 	// Auth routes — publicly accessible (no JWT required).
 	authCtrl.RegisterRoutes(app)
 
