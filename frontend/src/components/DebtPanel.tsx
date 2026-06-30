@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
+  BrainCircuit,
   DollarSign,
   FileWarning,
   Plus,
@@ -85,6 +86,28 @@ function HotspotCard({
           style={{ width: `${Math.min(100, Math.max(0, hotspot.debt_score))}%` }}
         />
       </div>
+
+      {hotspot.ml_prediction?.enabled && (
+        <div className="mt-2 rounded border border-[#242424] bg-[#0b0b0b] px-2 py-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <BrainCircuit size={11} className="shrink-0 text-[#888888]" />
+              <span className="truncate text-[10px] text-[#a0a0a0]">
+                ML {hotspot.ml_prediction.risk_label.toLowerCase()} · {Math.round(hotspot.ml_prediction.risk_probability * 100)}%
+              </span>
+            </div>
+            <span className="font-mono text-[9px] text-[#666666]">
+              {hotspot.ml_prediction.score_adjustment >= 0 ? '+' : ''}
+              {hotspot.ml_prediction.score_adjustment}
+            </span>
+          </div>
+          {hotspot.ml_prediction.important_features.length > 0 && (
+            <p className="mt-1 truncate text-[9px] text-[#666666]" title={hotspot.ml_prediction.important_features.join(', ')}>
+              {hotspot.ml_prediction.important_features.join(', ')}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
         <div className="rounded border border-[#1f1f1f] bg-[#0b0b0b] px-2 py-1.5">

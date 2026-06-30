@@ -62,21 +62,37 @@ func AnalyzeSnapshot(repo string, commits []CommitChange, files []SourceFile, al
 	}
 
 	maxes := metricMaxes(combined)
+	mlModel, mlErr := DefaultMLModel()
+	if mlErr != nil {
+		mlModel = nil
+	}
 	hotspots := make([]Hotspot, 0, len(pathList))
 	summary := Summary{}
 
 	for _, p := range pathList {
 		metrics := historyMetrics[p]
-		score := CalculateDebtScore(metrics, maxes)
+		heuristicScore := CalculateDebtScore(metrics, maxes)
+		score := heuristicScore
+		var mlPrediction *MLPrediction
+		if mlModel != nil {
+			prediction := mlModel.Predict(metrics, heuristicScore)
+			score = heuristicScore + prediction.ScoreAdjustment
+			mlPrediction = &prediction
+		}
 		level := LevelForScore(score)
 		cost := EstimateMonthlyCost(metrics, level, opts.HourlyCost)
 		reasons := ExplainRisk(metrics, maxes)
+		if mlPrediction != nil && mlPrediction.RiskProbability >= 0.55 {
+			reasons = append(reasons, fmt.Sprintf("ML model predicts %s risk (%.0f%%)", strings.ToLower(mlPrediction.RiskLabel), mlPrediction.RiskProbability*100))
+		}
 
 		hotspot := Hotspot{
 			File:                 p,
 			DebtScore:            score,
+			HeuristicScore:       heuristicScore,
 			Level:                level,
 			Metrics:              metrics,
+			MLPrediction:         mlPrediction,
 			EstimatedMonthlyCost: roundMoney(cost),
 			Reasons:              reasons,
 		}
@@ -294,9 +310,25 @@ func BuildSuggestedTask(h Hotspot, daysOverride ...int) SuggestedTask {
 		days = daysOverride[0]
 	}
 	actions := suggestedActions(h)
+	mlDetails := "ML calibration: disabled"
+	if h.MLPrediction != nil && h.MLPrediction.Enabled {
+		features := "none"
+		if len(h.MLPrediction.ImportantFeatures) > 0 {
+			features = strings.Join(h.MLPrediction.ImportantFeatures, ", ")
+		}
+		mlDetails = fmt.Sprintf("Heuristic score: %d\nML risk probability: %.0f%%\nML risk label: %s\nML score adjustment: %+d\nML important features: %s",
+			h.HeuristicScore,
+			h.MLPrediction.RiskProbability*100,
+			h.MLPrediction.RiskLabel,
+			h.MLPrediction.ScoreAdjustment,
+			features,
+		)
+	}
 	description := fmt.Sprintf(`Debt score: %d
 Risk level: %s
 File: %s
+
+%s
 
 Why this is risky:
 - %s
@@ -314,6 +346,7 @@ Suggested actions:
 		h.DebtScore,
 		h.Level,
 		h.File,
+		mlDetails,
 		strings.Join(h.Reasons, "\n- "),
 		days,
 		h.Metrics.CommitCount,

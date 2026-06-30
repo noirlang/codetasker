@@ -1,0 +1,37 @@
+{
+  "name": "technical-debt-risk-seed-v1",
+  "description": "Metric-only seed dataset for Render-safe debt risk calibration. No source code or snippets are included.",
+  "feature_caps": {
+    "commit_count": 30,
+    "total_churn": 2500,
+    "complexity": 220,
+    "loc": 1600,
+    "bugfix_commit_count": 12,
+    "todo_count": 20,
+    "author_count": 10
+  },
+  "examples": [
+    { "commit_count": 1, "total_churn": 30, "complexity": 4, "loc": 80, "bugfix_commit_count": 0, "todo_count": 0, "author_count": 1, "has_tests": true, "defect_prone": false },
+    { "commit_count": 2, "total_churn": 90, "complexity": 8, "loc": 140, "bugfix_commit_count": 0, "todo_count": 1, "author_count": 1, "has_tests": true, "defect_prone": false },
+    { "commit_count": 3, "total_churn": 160, "complexity": 12, "loc": 220, "bugfix_commit_count": 0, "todo_count": 1, "author_count": 2, "has_tests": true, "defect_prone": false },
+    { "commit_count": 4, "total_churn": 240, "complexity": 18, "loc": 260, "bugfix_commit_count": 1, "todo_count": 0, "author_count": 2, "has_tests": true, "defect_prone": false },
+    { "commit_count": 2, "total_churn": 120, "complexity": 24, "loc": 340, "bugfix_commit_count": 0, "todo_count": 2, "author_count": 1, "has_tests": false, "defect_prone": false },
+    { "commit_count": 5, "total_churn": 380, "complexity": 28, "loc": 420, "bugfix_commit_count": 1, "todo_count": 2, "author_count": 2, "has_tests": true, "defect_prone": false },
+    { "commit_count": 6, "total_churn": 480, "complexity": 35, "loc": 520, "bugfix_commit_count": 1, "todo_count": 3, "author_count": 3, "has_tests": true, "defect_prone": false },
+    { "commit_count": 4, "total_churn": 520, "complexity": 40, "loc": 620, "bugfix_commit_count": 0, "todo_count": 4, "author_count": 2, "has_tests": false, "defect_prone": false },
+    { "commit_count": 7, "total_churn": 620, "complexity": 42, "loc": 560, "bugfix_commit_count": 2, "todo_count": 2, "author_count": 3, "has_tests": true, "defect_prone": false },
+    { "commit_count": 8, "total_churn": 760, "complexity": 48, "loc": 700, "bugfix_commit_count": 1, "todo_count": 5, "author_count": 3, "has_tests": false, "defect_prone": true },
+    { "commit_count": 9, "total_churn": 880, "complexity": 55, "loc": 760, "bugfix_commit_count": 3, "todo_count": 3, "author_count": 3, "has_tests": true, "defect_prone": true },
+    { "commit_count": 10, "total_churn": 940, "complexity": 68, "loc": 820, "bugfix_commit_count": 2, "todo_count": 6, "author_count": 4, "has_tests": false, "defect_prone": true },
+    { "commit_count": 12, "total_churn": 1100, "complexity": 74, "loc": 920, "bugfix_commit_count": 4, "todo_count": 4, "author_count": 4, "has_tests": true, "defect_prone": true },
+    { "commit_count": 11, "total_churn": 1320, "complexity": 90, "loc": 980, "bugfix_commit_count": 3, "todo_count": 7, "author_count": 5, "has_tests": false, "defect_prone": true },
+    { "commit_count": 14, "total_churn": 1450, "complexity": 105, "loc": 1100, "bugfix_commit_count": 5, "todo_count": 5, "author_count": 4, "has_tests": true, "defect_prone": true },
+    { "commit_count": 13, "total_churn": 1580, "complexity": 120, "loc": 1240, "bugfix_commit_count": 4, "todo_count": 8, "author_count": 5, "has_tests": false, "defect_prone": true },
+    { "commit_count": 16, "total_churn": 1700, "complexity": 135, "loc": 1280, "bugfix_commit_count": 6, "todo_count": 7, "author_count": 6, "has_tests": true, "defect_prone": true },
+    { "commit_count": 18, "total_churn": 1900, "complexity": 150, "loc": 1350, "bugfix_commit_count": 7, "todo_count": 9, "author_count": 6, "has_tests": false, "defect_prone": true },
+    { "commit_count": 20, "total_churn": 2100, "complexity": 165, "loc": 1420, "bugfix_commit_count": 8, "todo_count": 10, "author_count": 7, "has_tests": true, "defect_prone": true },
+    { "commit_count": 22, "total_churn": 2300, "complexity": 185, "loc": 1500, "bugfix_commit_count": 9, "todo_count": 12, "author_count": 8, "has_tests": false, "defect_prone": true },
+    { "commit_count": 24, "total_churn": 2400, "complexity": 205, "loc": 1550, "bugfix_commit_count": 10, "todo_count": 14, "author_count": 8, "has_tests": false, "defect_prone": true },
+    { "commit_count": 26, "total_churn": 2500, "complexity": 220, "loc": 1600, "bugfix_commit_count": 11, "todo_count": 16, "author_count": 9, "has_tests": false, "defect_prone": true }
+  ]
+}

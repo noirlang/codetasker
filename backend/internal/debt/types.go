@@ -38,11 +38,24 @@ type Summary struct {
 type Hotspot struct {
 	File                 string          `json:"file"`
 	DebtScore            int             `json:"debt_score"`
+	HeuristicScore       int             `json:"heuristic_score"`
 	Level                Level           `json:"level"`
 	Metrics              Metrics         `json:"metrics"`
+	MLPrediction         *MLPrediction   `json:"ml_prediction,omitempty"`
 	EstimatedMonthlyCost float64         `json:"estimated_monthly_cost"`
 	Reasons              []string        `json:"reasons"`
 	SuggestedTasks       []SuggestedTask `json:"suggested_tasks"`
+}
+
+type MLPrediction struct {
+	Enabled           bool     `json:"enabled"`
+	Model             string   `json:"model"`
+	Dataset           string   `json:"dataset"`
+	RiskProbability   float64  `json:"risk_probability"`
+	RiskLabel         string   `json:"risk_label"`
+	Confidence        float64  `json:"confidence"`
+	ScoreAdjustment   int      `json:"score_adjustment"`
+	ImportantFeatures []string `json:"important_features"`
 }
 
 type Metrics struct {

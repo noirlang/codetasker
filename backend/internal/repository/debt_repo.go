@@ -68,8 +68,10 @@ func (r *DebtRepository) SaveAnalysis(
 			RepoName:             repoName,
 			FilePath:             hotspot.File,
 			DebtScore:            hotspot.DebtScore,
+			HeuristicScore:       hotspot.HeuristicScore,
 			Level:                string(hotspot.Level),
 			Metrics:              toDomainMetrics(hotspot.Metrics),
+			MLPrediction:         toDomainMLPrediction(hotspot.MLPrediction),
 			EstimatedMonthlyCost: hotspot.EstimatedMonthlyCost,
 			Reasons:              hotspot.Reasons,
 			CreatedAt:            now,
@@ -254,8 +256,10 @@ func (r *DebtRepository) analysisForRun(ctx context.Context, run domain.DebtAnal
 		hotspots = append(hotspots, debt.Hotspot{
 			File:                 metric.FilePath,
 			DebtScore:            metric.DebtScore,
+			HeuristicScore:       metric.HeuristicScore,
 			Level:                debt.Level(metric.Level),
 			Metrics:              toDebtMetrics(metric.Metrics),
+			MLPrediction:         toDebtMLPrediction(metric.MLPrediction),
 			EstimatedMonthlyCost: metric.EstimatedMonthlyCost,
 			Reasons:              metric.Reasons,
 			SuggestedTasks:       suggested,
@@ -335,5 +339,37 @@ func toDebtMetrics(metrics domain.DebtMetrics) debt.Metrics {
 		DuplicateImportCount:         metrics.DuplicateImportCount,
 		HasTests:                     metrics.HasTests,
 		CoverageStatus:               metrics.CoverageStatus,
+	}
+}
+
+func toDomainMLPrediction(prediction *debt.MLPrediction) *domain.DebtMLPrediction {
+	if prediction == nil {
+		return nil
+	}
+	return &domain.DebtMLPrediction{
+		Enabled:           prediction.Enabled,
+		Model:             prediction.Model,
+		Dataset:           prediction.Dataset,
+		RiskProbability:   prediction.RiskProbability,
+		RiskLabel:         prediction.RiskLabel,
+		Confidence:        prediction.Confidence,
+		ScoreAdjustment:   prediction.ScoreAdjustment,
+		ImportantFeatures: prediction.ImportantFeatures,
+	}
+}
+
+func toDebtMLPrediction(prediction *domain.DebtMLPrediction) *debt.MLPrediction {
+	if prediction == nil {
+		return nil
+	}
+	return &debt.MLPrediction{
+		Enabled:           prediction.Enabled,
+		Model:             prediction.Model,
+		Dataset:           prediction.Dataset,
+		RiskProbability:   prediction.RiskProbability,
+		RiskLabel:         prediction.RiskLabel,
+		Confidence:        prediction.Confidence,
+		ScoreAdjustment:   prediction.ScoreAdjustment,
+		ImportantFeatures: prediction.ImportantFeatures,
 	}
 }

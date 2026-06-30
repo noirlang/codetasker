@@ -234,11 +234,24 @@ type DebtFileMetric struct {
 	RepoName             string             `bson:"repo_name" json:"repo_name"`
 	FilePath             string             `bson:"file_path" json:"file_path"`
 	DebtScore            int                `bson:"debt_score" json:"debt_score"`
+	HeuristicScore       int                `bson:"heuristic_score" json:"heuristic_score"`
 	Level                string             `bson:"level" json:"level"`
 	Metrics              DebtMetrics        `bson:"metrics" json:"metrics"`
+	MLPrediction         *DebtMLPrediction  `bson:"ml_prediction,omitempty" json:"ml_prediction,omitempty"`
 	EstimatedMonthlyCost float64            `bson:"estimated_monthly_cost" json:"estimated_monthly_cost"`
 	Reasons              []string           `bson:"reasons" json:"reasons"`
 	CreatedAt            time.Time          `bson:"created_at" json:"created_at"`
+}
+
+type DebtMLPrediction struct {
+	Enabled           bool     `bson:"enabled" json:"enabled"`
+	Model             string   `bson:"model" json:"model"`
+	Dataset           string   `bson:"dataset" json:"dataset"`
+	RiskProbability   float64  `bson:"risk_probability" json:"risk_probability"`
+	RiskLabel         string   `bson:"risk_label" json:"risk_label"`
+	Confidence        float64  `bson:"confidence" json:"confidence"`
+	ScoreAdjustment   int      `bson:"score_adjustment" json:"score_adjustment"`
+	ImportantFeatures []string `bson:"important_features" json:"important_features"`
 }
 
 type DebtMetrics struct {

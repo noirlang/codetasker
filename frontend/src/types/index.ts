@@ -341,11 +341,24 @@ export interface DebtSuggestedTask {
   created_task_id?: string;
 }
 
+export interface DebtMLPrediction {
+  enabled: boolean;
+  model: string;
+  dataset: string;
+  risk_probability: number;
+  risk_label: 'NORMAL' | 'ELEVATED' | 'HIGH';
+  confidence: number;
+  score_adjustment: number;
+  important_features: string[];
+}
+
 export interface DebtHotspot {
   file: string;
   debt_score: number;
+  heuristic_score: number;
   level: DebtLevel;
   metrics: DebtMetrics;
+  ml_prediction?: DebtMLPrediction;
   estimated_monthly_cost: number;
   reasons: string[];
   suggested_tasks: DebtSuggestedTask[];
