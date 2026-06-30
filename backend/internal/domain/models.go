@@ -203,6 +203,83 @@ type SyncedRepo struct {
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 }
 
+// DebtAnalysisRun stores one technical-debt analysis execution for a repository.
+// Source code is intentionally not stored; only metrics, file paths, and
+// generated task descriptions are persisted.
+type DebtAnalysisRun struct {
+	ID                    primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	RepoID                int64              `bson:"repo_id" json:"repo_id"`
+	RepoName              string             `bson:"repo_name" json:"repo_name"`
+	UserID                primitive.ObjectID `bson:"user_id" json:"user_id"`
+	AnalyzedAt            time.Time          `bson:"analyzed_at" json:"analyzed_at"`
+	Days                  int                `bson:"days" json:"days"`
+	HourlyEngineerCostUSD float64            `bson:"hourly_engineer_cost_usd" json:"hourly_engineer_cost_usd"`
+	Summary               DebtSummary        `bson:"summary" json:"summary"`
+}
+
+type DebtSummary struct {
+	FilesAnalyzed        int     `bson:"files_analyzed" json:"files_analyzed"`
+	Critical             int     `bson:"critical" json:"critical"`
+	High                 int     `bson:"high" json:"high"`
+	Medium               int     `bson:"medium" json:"medium"`
+	Low                  int     `bson:"low" json:"low"`
+	EstimatedMonthlyCost float64 `bson:"estimated_monthly_cost" json:"estimated_monthly_cost"`
+}
+
+// DebtFileMetric stores per-file debt metrics for a run.
+type DebtFileMetric struct {
+	ID                   primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	RunID                primitive.ObjectID `bson:"run_id" json:"run_id"`
+	RepoID               int64              `bson:"repo_id" json:"repo_id"`
+	RepoName             string             `bson:"repo_name" json:"repo_name"`
+	FilePath             string             `bson:"file_path" json:"file_path"`
+	DebtScore            int                `bson:"debt_score" json:"debt_score"`
+	Level                string             `bson:"level" json:"level"`
+	Metrics              DebtMetrics        `bson:"metrics" json:"metrics"`
+	EstimatedMonthlyCost float64            `bson:"estimated_monthly_cost" json:"estimated_monthly_cost"`
+	Reasons              []string           `bson:"reasons" json:"reasons"`
+	CreatedAt            time.Time          `bson:"created_at" json:"created_at"`
+}
+
+type DebtMetrics struct {
+	CommitCount                  int        `bson:"commit_count" json:"commit_count"`
+	ChurnAdded                   int        `bson:"churn_added" json:"churn_added"`
+	ChurnDeleted                 int        `bson:"churn_deleted" json:"churn_deleted"`
+	TotalChurn                   int        `bson:"total_churn" json:"total_churn"`
+	AuthorCount                  int        `bson:"author_count" json:"author_count"`
+	LastTouchedAt                *time.Time `bson:"last_touched_at,omitempty" json:"last_touched_at,omitempty"`
+	BugfixCommitCount            int        `bson:"bugfix_commit_count" json:"bugfix_commit_count"`
+	LOC                          int        `bson:"loc" json:"loc"`
+	FunctionCount                int        `bson:"function_count" json:"function_count"`
+	AvgFunctionLength            float64    `bson:"avg_function_length" json:"avg_function_length"`
+	MaxFunctionLength            int        `bson:"max_function_length" json:"max_function_length"`
+	NestingDepthEstimate         int        `bson:"nesting_depth_estimate" json:"nesting_depth_estimate"`
+	CyclomaticComplexityEstimate int        `bson:"cyclomatic_complexity_estimate" json:"cyclomatic_complexity_estimate"`
+	TodoCount                    int        `bson:"todo_count" json:"todo_count"`
+	DuplicateImportCount         int        `bson:"duplicate_import_count" json:"duplicate_import_count"`
+	HasTests                     bool       `bson:"has_tests" json:"has_tests"`
+	CoverageStatus               string     `bson:"coverage_status" json:"coverage_status"`
+}
+
+// DebtSuggestedTask stores a generated task proposal for a high/critical file.
+type DebtSuggestedTask struct {
+	ID                   primitive.ObjectID  `bson:"_id,omitempty" json:"id"`
+	RunID                primitive.ObjectID  `bson:"run_id" json:"run_id"`
+	RepoID               int64               `bson:"repo_id" json:"repo_id"`
+	RepoName             string              `bson:"repo_name" json:"repo_name"`
+	FilePath             string              `bson:"file_path" json:"file_path"`
+	Title                string              `bson:"title" json:"title"`
+	Description          string              `bson:"description" json:"description"`
+	Actions              []string            `bson:"actions" json:"actions"`
+	DebtScore            int                 `bson:"debt_score" json:"debt_score"`
+	Level                string              `bson:"level" json:"level"`
+	EstimatedMonthlyCost float64             `bson:"estimated_monthly_cost" json:"estimated_monthly_cost"`
+	Status               string              `bson:"status" json:"status"`
+	CreatedTaskID        *primitive.ObjectID `bson:"created_task_id,omitempty" json:"created_task_id,omitempty"`
+	CreatedAt            time.Time           `bson:"created_at" json:"created_at"`
+	UpdatedAt            time.Time           `bson:"updated_at" json:"updated_at"`
+}
+
 // RepoRole represents the permission level of a collaborator on a repository.
 type RepoRole string
 
@@ -277,7 +354,7 @@ type ActivityLog struct {
 	Action string `bson:"action" json:"action"`
 	// TargetType is one of: "task", "pr", "collaborator".
 	TargetType string `bson:"target_type" json:"target_type"`
-	TargetID    string `bson:"target_id" json:"target_id"`
+	TargetID   string `bson:"target_id" json:"target_id"`
 	// TargetLabel is a human-readable description of the target.
 	TargetLabel string            `bson:"target_label" json:"target_label"`
 	Meta        map[string]string `bson:"meta,omitempty" json:"meta,omitempty"`

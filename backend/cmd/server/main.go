@@ -81,6 +81,7 @@ func main() {
 	commentRepo := repository.NewCommentRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 	activityRepo := repository.NewActivityRepository(db)
+	debtRepo := repository.NewDebtRepository(db)
 
 	// Services
 	authService := service.NewAuthService(cfg, userRepo, log)
@@ -89,6 +90,7 @@ func main() {
 	codeOwnerService := service.NewCodeOwnerService(githubService, userRepo, log)
 	todoParser := parser.NewParser()
 	taskService := service.NewTaskService(taskRepo, userRepo, todoParser, githubService, codeOwnerService, log)
+	debtService := service.NewDebtService(githubService, debtRepo, taskRepo, userRepo, log)
 
 	telegramService := service.NewTelegramService(log)
 
@@ -98,6 +100,7 @@ func main() {
 	webhookCtrl := controller.NewWebhookController(taskService)
 	taskCtrl := controller.NewTaskController(taskService, githubService, syncedRepo, collaboratorRepo, commentRepo, notifRepo, activityRepo, userRepo, emailService, codeOwnerService, telegramService, taskRepo)
 	notifCtrl := controller.NewNotificationController(notifRepo)
+	debtCtrl := controller.NewDebtController(debtService, githubService, syncedRepo, collaboratorRepo)
 
 	// ── Step 6: Configure Fiber ──────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
@@ -178,6 +181,7 @@ func main() {
 	repoCtrl.RegisterRoutes(protected)
 	taskCtrl.RegisterRoutes(protected)
 	notifCtrl.RegisterRoutes(protected)
+	debtCtrl.RegisterRoutes(protected)
 
 	// ── Step 8: Start server ─────────────────────────────────────────────────
 	// We start the server in a background goroutine so the main goroutine can

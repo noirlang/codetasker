@@ -132,5 +132,42 @@ func (d *Database) EnsureIndexes(ctx context.Context) error {
 		return fmt.Errorf("create collaborators.{repo_id,user_id} index: %w", err)
 	}
 
+	// ── debt analysis collections ──────────────────────────────────────────
+	debtRunsCol := d.db.Collection("debt_analysis_runs")
+	_, err = debtRunsCol.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "repo_id", Value: 1},
+			{Key: "analyzed_at", Value: -1},
+		},
+		Options: options.Index().SetBackground(true),
+	})
+	if err != nil {
+		return fmt.Errorf("create debt_analysis_runs.{repo_id,analyzed_at} index: %w", err)
+	}
+
+	debtMetricsCol := d.db.Collection("debt_file_metrics")
+	_, err = debtMetricsCol.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "run_id", Value: 1},
+			{Key: "debt_score", Value: -1},
+		},
+		Options: options.Index().SetBackground(true),
+	})
+	if err != nil {
+		return fmt.Errorf("create debt_file_metrics.{run_id,debt_score} index: %w", err)
+	}
+
+	debtTasksCol := d.db.Collection("debt_suggested_tasks")
+	_, err = debtTasksCol.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "run_id", Value: 1},
+			{Key: "file_path", Value: 1},
+		},
+		Options: options.Index().SetBackground(true),
+	})
+	if err != nil {
+		return fmt.Errorf("create debt_suggested_tasks.{run_id,file_path} index: %w", err)
+	}
+
 	return nil
 }

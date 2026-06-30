@@ -556,6 +556,45 @@ func (s *GithubService) ListCommits(ctx context.Context, userID primitive.Object
 	return result.Commits, nil
 }
 
+// ListCommitsSince lists commits on a branch since the provided timestamp.
+func (s *GithubService) ListCommitsSince(ctx context.Context, userID primitive.ObjectID, owner, repo, branch string, since time.Time) ([]*github.RepositoryCommit, error) {
+	if err := validateName(owner, "owner"); err != nil {
+		return nil, err
+	}
+	if err := validateName(repo, "repo"); err != nil {
+		return nil, err
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("ListCommitsSince resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	opts := &github.CommitsListOptions{
+		SHA:   branch,
+		Since: since,
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	var commits []*github.RepositoryCommit
+	for page := 1; page <= 5; page++ {
+		opts.Page = page
+		batch, resp, err := client.Repositories.ListCommits(ctx, owner, repo, opts)
+		if err != nil {
+			return nil, fmt.Errorf("ListCommitsSince API call: %w", err)
+		}
+		commits = append(commits, batch...)
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+	}
+
+	return commits, nil
+}
+
 // ListCommitsPage lists one paginated commit page on a given branch.
 func (s *GithubService) ListCommitsPage(ctx context.Context, userID primitive.ObjectID, owner, repo, branch string, page, perPage int) (*CommitListResult, error) {
 	if err := validateName(owner, "owner"); err != nil {
@@ -951,8 +990,8 @@ func (s *GithubService) MergePullRequest(ctx context.Context, userID primitive.O
 	}
 
 	options := &github.PullRequestOptions{
-		CommitTitle:   commitTitle,
-		MergeMethod:   mergeMethod,
+		CommitTitle: commitTitle,
+		MergeMethod: mergeMethod,
 	}
 
 	result, _, err := client.PullRequests.Merge(ctx, owner, repo, prNumber, commitMessage, options)
@@ -962,7 +1001,6 @@ func (s *GithubService) MergePullRequest(ctx context.Context, userID primitive.O
 
 	return result.GetSHA(), nil
 }
-
 
 // GetRepository fetches repository details including the default branch.
 func (s *GithubService) GetRepository(ctx context.Context, userID primitive.ObjectID, owner, repo string) (*github.Repository, error) {
@@ -1206,4 +1244,3 @@ func (s *GithubService) IsCollaborator(ctx context.Context, userID primitive.Obj
 
 	return isCollab, nil
 }
-

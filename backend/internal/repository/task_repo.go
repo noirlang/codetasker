@@ -124,6 +124,28 @@ func (r *TaskRepository) FindByID(ctx context.Context, id primitive.ObjectID) (*
 	return &task, nil
 }
 
+// FindByRepoFileContent retrieves a task using the same natural key used by
+// UpsertTask. It is used after generated task upserts to return the created
+// task ID without duplicating task insertion logic.
+func (r *TaskRepository) FindByRepoFileContent(ctx context.Context, repoID int64, filePath, content, taskType string) (*domain.Task, error) {
+	var task domain.Task
+	filter := bson.M{
+		"repo_id":   repoID,
+		"file_path": filePath,
+		"content":   content,
+		"type":      taskType,
+	}
+
+	err := r.col.FindOne(ctx, filter).Decode(&task)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("FindByRepoFileContent(repo=%d file=%s): %w", repoID, filePath, err)
+	}
+	return &task, nil
+}
+
 // UpdateStatus atomically updates the status and updated_at fields of the task
 // identified by id. It does not touch any other fields, preserving all
 // pipeline-managed data (content, type, commit_sha, etc.).
