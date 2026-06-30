@@ -30,6 +30,7 @@ import type {
   CommitDetail,
   RepoStats,
   ActivityLog,
+  DebtAnalysis,
 } from '../types';
 
 // ── Axios instance ─────────────────────────────────────────────────────────
@@ -504,6 +505,58 @@ export const reposApi = {
       `/repos/${owner}/${repo}/activity`
     );
     return data.activities || [];
+  },
+};
+
+// ── Technical Debt API ─────────────────────────────────────────────────────
+
+export const debtApi = {
+  getLatest: async (owner: string, repo: string): Promise<DebtAnalysis | null> => {
+    try {
+      const { data } = await client.get<{ analysis: DebtAnalysis }>(
+        `/repos/${owner}/${repo}/debt`
+      );
+      return data.analysis;
+    } catch (err) {
+      const apiErr = err as ApiError;
+      if (apiErr.error === 'no_analysis') {
+        return null;
+      }
+      throw err;
+    }
+  },
+
+  analyze: async (
+    owner: string,
+    repo: string,
+    params: { days: number; hourly_cost: number }
+  ): Promise<DebtAnalysis> => {
+    const { data } = await client.post<{ analysis: DebtAnalysis }>(
+      `/repos/${owner}/${repo}/debt/analyze`,
+      params
+    );
+    return data.analysis;
+  },
+
+  createTask: async (
+    owner: string,
+    repo: string,
+    suggestionId: string
+  ): Promise<Task> => {
+    const { data } = await client.post<{ task: Task }>(
+      `/repos/${owner}/${repo}/debt/tasks/${suggestionId}/create`
+    );
+    return data.task;
+  },
+
+  createAllHighPriorityTasks: async (
+    owner: string,
+    repo: string
+  ): Promise<{ tasks: Task[]; count: number }> => {
+    const { data } = await client.post<{ tasks: Task[]; count: number }>(
+      `/repos/${owner}/${repo}/debt/tasks/create-all`
+    );
+    return data;
   },
 };
 

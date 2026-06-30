@@ -27,6 +27,7 @@ import {
   GitPullRequest,
   RefreshCw,
   BarChart2,
+  ShieldAlert,
 } from 'lucide-react';
 import { reposApi } from '../api/client';
 import { useTaskStore } from '../store/taskStore';
@@ -40,6 +41,7 @@ import CommitHistoryPanel from './CommitHistoryPanel';
 import PullRequestPanel from './PullRequestPanel';
 import ActionsPanel from './ActionsPanel';
 import RepoStatsPanel from './RepoStatsPanel';
+import DebtPanel from './DebtPanel';
 import Spinner from './ui/Spinner';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -221,7 +223,7 @@ export default function RepoView() {
 
   // Tabs tracking
   const [leftTab,         setLeftTab]         = useState<'files' | 'commits' | 'access'>('files');
-  const [rightTab,        setRightTab]        = useState<'tasks' | 'pulls' | 'actions' | 'analytics'>('tasks');
+  const [rightTab,        setRightTab]        = useState<'tasks' | 'pulls' | 'actions' | 'debt' | 'analytics'>('tasks');
   const [pulls,           setPulls]           = useState<PullRequest[]>([]);
   const [issues,          setIssues]          = useState<Issue[]>([]);
 
@@ -490,7 +492,7 @@ export default function RepoView() {
           aria-label="Left side navigation"
         >
           {/* Left Tabs */}
-          <div className="flex h-9 border-b border-[#2a2a2a] px-2 gap-1 bg-[#111111] items-end shrink-0">
+          <div className="flex h-9 border-b border-[#2a2a2a] px-2 gap-1 bg-[#111111] items-end shrink-0 overflow-x-auto">
             <button
               onClick={() => setLeftTab('files')}
               className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer ${
@@ -639,7 +641,7 @@ export default function RepoView() {
           <div className="flex h-9 border-b border-[#2a2a2a] px-2 gap-1 bg-[#111111] items-end shrink-0">
             <button
               onClick={() => setRightTab('tasks')}
-              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer ${
+              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
                 rightTab === 'tasks'
                   ? 'border-white text-white'
                   : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
@@ -649,7 +651,7 @@ export default function RepoView() {
             </button>
             <button
               onClick={() => setRightTab('pulls')}
-              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer ${
+              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
                 rightTab === 'pulls'
                   ? 'border-white text-white'
                   : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
@@ -660,7 +662,7 @@ export default function RepoView() {
             </button>
             <button
               onClick={() => setRightTab('actions')}
-              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer ${
+              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
                 rightTab === 'actions'
                   ? 'border-white text-white'
                   : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
@@ -670,8 +672,19 @@ export default function RepoView() {
               Actions
             </button>
             <button
+              onClick={() => setRightTab('debt')}
+              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
+                rightTab === 'debt'
+                  ? 'border-white text-white'
+                  : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+              }`}
+            >
+              <ShieldAlert size={11} />
+              Debt
+            </button>
+            <button
               onClick={() => setRightTab('analytics')}
-              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer ${
+              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
                 rightTab === 'analytics'
                   ? 'border-white text-white'
                   : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
@@ -707,6 +720,12 @@ export default function RepoView() {
                 owner={owner}
                 repoName={repoName}
                 currentBranch={currentBranch}
+              />
+            ) : rightTab === 'debt' ? (
+              <DebtPanel
+                owner={owner}
+                repoName={repoName}
+                repoId={repoId}
               />
             ) : (
               <RepoStatsPanel

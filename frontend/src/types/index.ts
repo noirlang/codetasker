@@ -310,6 +310,62 @@ export interface DebtStat {
   low: number;
 }
 
+export type DebtLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface DebtMetrics {
+  commit_count: number;
+  churn_added: number;
+  churn_deleted: number;
+  total_churn: number;
+  author_count: number;
+  last_touched_at?: string;
+  bugfix_commit_count: number;
+  loc: number;
+  function_count: number;
+  avg_function_length: number;
+  max_function_length: number;
+  nesting_depth_estimate: number;
+  cyclomatic_complexity_estimate: number;
+  todo_count: number;
+  duplicate_import_count: number;
+  has_tests: boolean;
+  coverage_status: string;
+}
+
+export interface DebtSuggestedTask {
+  id?: string;
+  title: string;
+  description: string;
+  actions: string[];
+  status?: 'suggested' | 'created';
+  created_task_id?: string;
+}
+
+export interface DebtHotspot {
+  file: string;
+  debt_score: number;
+  level: DebtLevel;
+  metrics: DebtMetrics;
+  estimated_monthly_cost: number;
+  reasons: string[];
+  suggested_tasks: DebtSuggestedTask[];
+}
+
+export interface DebtAnalysis {
+  repo: string;
+  analyzed_at: string;
+  days: number;
+  summary: {
+    files_analyzed: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    estimated_monthly_cost: number;
+  };
+  hotspots: DebtHotspot[];
+}
+
 /** Aggregated statistics for a repository's tasks */
 export interface RepoStats {
   total: number;
