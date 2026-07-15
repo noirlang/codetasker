@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CheckCircle2,
   XCircle,
@@ -407,9 +408,9 @@ export default function PipelineViewer({
       </div>
 
       {/* Maximized Fullscreen Overlay Modal */}
-      {isMaximized && (
+      {isMaximized && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/85 backdrop-blur-md animate__animated animate__fadeIn"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-black/85 backdrop-blur-md animate__animated animate__fadeIn"
           style={{ animationDuration: '0.2s' }}
         >
           <div className="max-w-5xl w-full h-[85vh] bg-[#0c0c0c] border border-[#2a2a2a] rounded-xl flex flex-col p-6 shadow-2xl overflow-hidden relative">
@@ -431,7 +432,8 @@ export default function PipelineViewer({
             {/* Rendering the content with modal styles */}
             {renderContent(true)}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
