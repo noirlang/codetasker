@@ -428,3 +428,24 @@ export interface ActionWorkflowRun {
   updated_at: string;
   run_started_at: string;
 }
+
+export interface JobStep {
+  name: string;
+  status: string;
+  conclusion: string;
+  number: number;
+  started_at: string;
+  completed_at: string;
+}
+
+export interface WorkflowJob {
+  id: number;
+  run_id: number;
+  name: string;
+  status: string;
+  conclusion: string;
+  started_at: string;
+  completed_at: string;
+  html_url: string;
+  steps: JobStep[];
+}

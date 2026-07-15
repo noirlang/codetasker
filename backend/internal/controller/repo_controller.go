@@ -68,6 +68,8 @@ func (rc *RepoController) RegisterRoutes(group fiber.Router) {
 	group.Get("/repos/:owner/:repo/commits", rc.GetCommits)
 	group.Get("/repos/:owner/:repo/actions/workflows", rc.GetActionWorkflows)
 	group.Get("/repos/:owner/:repo/actions/runs", rc.GetActionRuns)
+	group.Get("/repos/:owner/:repo/actions/runs/:run_id/jobs", rc.GetWorkflowJobs)
+	group.Get("/repos/:owner/:repo/actions/jobs/:job_id/logs", rc.GetWorkflowJobLogs)
 	group.Get("/repos/:owner/:repo/pulls", rc.GetPulls)
 	group.Post("/repos/:owner/:repo/pulls/:number/merge", rc.MergePullRequest)
 	group.Post("/repos/:owner/:repo/merge", rc.MergeBranch)
@@ -2164,4 +2166,153 @@ func (rc *RepoController) resolveTargetUserID(ctx context.Context, userID primit
 		return synced.UserID
 	}
 	return userID
+}
+
+// GetWorkflowJobs returns the jobs of a specific workflow run.
+// Route: GET /api/repos/:owner/:repo/actions/runs/:run_id/jobs
+func (rc *RepoController) GetWorkflowJobs(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+	runIDStr := c.Params("run_id")
+	runID, err := strconv.ParseInt(runIDStr, 10, 64)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_run_id",
+			"message": "run_id must be a valid integer",
+		})
+	}
+
+	targetUserID := rc.resolveTargetUserID(c.Context(), userID, owner, repo)
+
+	jobs, err := rc.githubService.ListWorkflowJobs(c.Context(), targetUserID, owner, repo, runID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "get_workflow_jobs_failed",
+			"message": err.Error(),
+		})
+	}
+
+	type jobStepResponse struct {
+		Name        string `json:"name"`
+		Status      string `json:"status"`
+		Conclusion  string `json:"conclusion"`
+		Number      int64  `json:"number"`
+		StartedAt   string `json:"started_at"`
+		CompletedAt string `json:"completed_at"`
+	}
+
+	type workflowJobResponse struct {
+		ID          int64             `json:"id"`
+		RunID       int64             `json:"run_id"`
+		Name        string            `json:"name"`
+		Status      string            `json:"status"`
+		Conclusion  string            `json:"conclusion"`
+		StartedAt   string            `json:"started_at"`
+		CompletedAt string            `json:"completed_at"`
+		HTMLURL     string            `json:"html_url"`
+		Steps       []jobStepResponse `json:"steps"`
+	}
+
+	var response []workflowJobResponse
+	if jobs != nil {
+		response = make([]workflowJobResponse, 0, len(jobs.Jobs))
+		for _, job := range jobs.Jobs {
+			if job == nil {
+				continue
+			}
+
+			startedAt := ""
+			if job.StartedAt != nil {
+				startedAt = job.StartedAt.Format(time.RFC3339)
+			}
+
+			completedAt := ""
+			if job.CompletedAt != nil {
+				completedAt = job.CompletedAt.Format(time.RFC3339)
+			}
+
+			steps := make([]jobStepResponse, 0, len(job.Steps))
+			for _, step := range job.Steps {
+				if step == nil {
+					continue
+				}
+				stepStartedAt := ""
+				if step.StartedAt != nil {
+					stepStartedAt = step.StartedAt.Format(time.RFC3339)
+				}
+				stepCompletedAt := ""
+				if step.CompletedAt != nil {
+					stepCompletedAt = step.CompletedAt.Format(time.RFC3339)
+				}
+				steps = append(steps, jobStepResponse{
+					Name:        step.GetName(),
+					Status:      step.GetStatus(),
+					Conclusion:  step.GetConclusion(),
+					Number:      step.GetNumber(),
+					StartedAt:   stepStartedAt,
+					CompletedAt: stepCompletedAt,
+				})
+			}
+
+			response = append(response, workflowJobResponse{
+				ID:          job.GetID(),
+				RunID:       job.GetRunID(),
+				Name:        job.GetName(),
+				Status:      job.GetStatus(),
+				Conclusion:  job.GetConclusion(),
+				StartedAt:   startedAt,
+				CompletedAt: completedAt,
+				HTMLURL:     job.GetHTMLURL(),
+				Steps:       steps,
+			})
+		}
+	} else {
+		response = []workflowJobResponse{}
+	}
+
+	return c.JSON(fiber.Map{
+		"jobs":  response,
+		"count": len(response),
+	})
+}
+
+// GetWorkflowJobLogs returns the raw log output of a specific job.
+// Route: GET /api/repos/:owner/:repo/actions/jobs/:job_id/logs
+func (rc *RepoController) GetWorkflowJobLogs(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+	jobIDStr := c.Params("job_id")
+	jobID, err := strconv.ParseInt(jobIDStr, 10, 64)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_job_id",
+			"message": "job_id must be a valid integer",
+		})
+	}
+
+	targetUserID := rc.resolveTargetUserID(c.Context(), userID, owner, repo)
+
+	logs, err := rc.githubService.GetWorkflowJobLogs(c.Context(), targetUserID, owner, repo, jobID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "get_job_logs_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.SendString(logs)
 }

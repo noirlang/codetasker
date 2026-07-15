@@ -352,6 +352,8 @@ export default function CommitHistoryPanel({
 
                     {expandedCommitSha === commit.sha && (
                       <PipelineViewer
+                        owner={owner}
+                        repo={repoName}
                         sha={commit.sha}
                         message={commit.message}
                         checkState={commit.check_state}

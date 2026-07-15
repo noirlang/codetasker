@@ -374,10 +374,13 @@ export default function ActionsPanel({ owner, repoName, currentBranch }: Actions
                     {expandedRunId === run.id && (
                       <div className="mt-3">
                         <PipelineViewer
+                          owner={owner}
+                          repo={repoName}
                           sha={run.head_sha || ''}
                           message={run.display_title || run.name || ''}
                           checkState={run.conclusion === 'success' ? 'success' : run.conclusion === 'failure' ? 'failure' : 'pending'}
                           checkRuns={[]}
+                          runId={run.id}
                           onClose={() => setExpandedRunId(null)}
                         />
                       </div>

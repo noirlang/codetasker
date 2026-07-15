@@ -10,9 +10,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -707,6 +709,76 @@ func (s *GithubService) ListActionRuns(ctx context.Context, userID primitive.Obj
 	}
 
 	return runs, nil
+}
+
+func (s *GithubService) ListWorkflowJobs(ctx context.Context, userID primitive.ObjectID, owner, repo string, runID int64) (*github.Jobs, error) {
+	if err := validateName(owner, "owner"); err != nil {
+		return nil, err
+	}
+	if err := validateName(repo, "repo"); err != nil {
+		return nil, err
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("ListWorkflowJobs resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	jobs, _, err := client.Actions.ListWorkflowJobs(ctx, owner, repo, runID, &github.ListWorkflowJobsOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("ListWorkflowJobs API call: %w", err)
+	}
+
+	return jobs, nil
+}
+
+func (s *GithubService) GetWorkflowJobLogs(ctx context.Context, userID primitive.ObjectID, owner, repo string, jobID int64) (string, error) {
+	if err := validateName(owner, "owner"); err != nil {
+		return "", err
+	}
+	if err := validateName(repo, "repo"); err != nil {
+		return "", err
+	}
+
+	token, err := s.resolveToken(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("GetWorkflowJobLogs resolveToken: %w", err)
+	}
+
+	client := newGithubClient(ctx, token)
+	url, _, err := client.Actions.GetWorkflowJobLogs(ctx, owner, repo, jobID, 10)
+	if err != nil {
+		return "", fmt.Errorf("GetWorkflowJobLogs API call: %w", err)
+	}
+
+	if url == nil {
+		return "", fmt.Errorf("no logs URL returned from GitHub")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("create logs request: %w", err)
+	}
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	logResp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch logs from redirect URL: %w", err)
+	}
+	defer logResp.Body.Close()
+
+	if logResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("fetch logs status: %d", logResp.StatusCode)
+	}
+
+	buf := new(bytes.Buffer)
+	_, err = buf.ReadFrom(logResp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read logs body: %w", err)
+	}
+
+	return buf.String(), nil
 }
 
 func isAllowedWorkflowRunStatus(status string) bool {

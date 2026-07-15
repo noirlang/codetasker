@@ -31,6 +31,7 @@ import type {
   RepoStats,
   ActivityLog,
   DebtAnalysis,
+  WorkflowJob,
 } from '../types';
 
 // ── Axios instance ─────────────────────────────────────────────────────────
@@ -309,6 +310,36 @@ export const reposApi = {
       { params }
     );
     return data.runs;
+  },
+
+  /**
+   * List jobs for a specific workflow run.
+   * GET /api/repos/:owner/:repo/actions/runs/:runId/jobs
+   */
+  listWorkflowJobs: async (
+    owner: string,
+    repo: string,
+    runId: number
+  ): Promise<WorkflowJob[]> => {
+    const { data } = await client.get<{ jobs: WorkflowJob[] }>(
+      `/repos/${owner}/${repo}/actions/runs/${runId}/jobs`
+    );
+    return data.jobs;
+  },
+
+  /**
+   * Get raw log output of a specific job.
+   * GET /api/repos/:owner/:repo/actions/jobs/:jobId/logs
+   */
+  getWorkflowJobLogs: async (
+    owner: string,
+    repo: string,
+    jobId: number
+  ): Promise<string> => {
+    const { data } = await client.get<string>(
+      `/repos/${owner}/${repo}/actions/jobs/${jobId}/logs`
+    );
+    return data;
   },
 
   /**
