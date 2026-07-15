@@ -53,80 +53,6 @@ export default function PipelineViewer({
   const [copied, setCopied] = useState(false);
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
-  // Parse raw text logs into LogLine objects
-  const parsedLogs = useMemo<LogLine[]>(() => {
-    if (selectedNode === 'trigger') {
-      const logsList: LogLine[] = [
-        { text: 'Initializing CodeTasker Webhook Pipeline...', type: 'step', timestamp: '12:00:00' },
-        { text: `Git: Received commit [${sha.slice(0, 7)}] - "${message.split('\n')[0]}"`, type: 'info', timestamp: '12:00:01' },
-        { text: 'Git: Refs updated on branch refs/heads/main', type: 'info', timestamp: '12:00:01' },
-        { text: 'Webhook: Payload verified with SHA256 signature.', type: 'info', timestamp: '12:00:02' },
-      ];
-      if (checkError) {
-        logsList.push({ text: `Webhook check status error: ${checkError}`, type: 'error', timestamp: '12:00:03' });
-      }
-      logsList.push({ text: 'Webhook: Task synchronizer triggered in background.', type: 'success', timestamp: '12:00:04' });
-      return logsList;
-    }
-
-    if (selectedNode === 'ci-init') {
-      return [
-        { text: 'Triggering GitHub Actions workflow: ci.yml', type: 'step', timestamp: '12:00:05' },
-        { text: 'Requesting virtual environment (ubuntu-latest)...', type: 'info', timestamp: '12:00:06' },
-        { text: 'Runner acquired. Preparing container filesystem...', type: 'success', timestamp: '12:00:07' },
-        { text: 'Setting up Actions Runner controller v2.316.0...', type: 'info', timestamp: '12:00:08' },
-        { text: 'Successfully checked out repository source code.', type: 'success', timestamp: '12:00:10' },
-      ];
-    }
-
-    if (!selectedJobId) return [];
-
-    if (loadingLogs[selectedJobId]) {
-      return [{ text: 'Fetching raw build logs from GitHub Actions API...', type: 'step', timestamp: '...' }];
-    }
-
-    const rawText = jobLogs[selectedJobId];
-    if (!rawText) {
-      return [{ text: 'No logs available for this job node.', type: 'warning', timestamp: '...' }];
-    }
-
-    // Split logs and remove ANSI color escape sequences
-    const lines = rawText.split('\n');
-    return lines.map((line) => {
-      // Strip ANSI escape codes
-      const cleanLine = line.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
-
-      // Parse timestamp if present (GitHub prepends ISO dates e.g. "2026-07-15T10:39:59.123456Z ")
-      let text = cleanLine;
-      let timestamp = '...';
-      const timeMatch = cleanLine.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s(.*)$/);
-      if (timeMatch) {
-        text = timeMatch[2];
-        try {
-          timestamp = new Date(timeMatch[1]).toLocaleTimeString();
-        } catch {
-          timestamp = timeMatch[1].slice(11, 19);
-        }
-      }
-
-      // Infer line category/color
-      let type: LogLine['type'] = 'info';
-      const upper = text.toUpperCase();
-      if (upper.includes('ERROR') || upper.includes('FAILED') || upper.includes('ERR!')) {
-        type = 'error';
-      } else if (upper.includes('SUCCESS') || upper.includes('OK') || upper.includes('COMPLETE')) {
-        type = 'success';
-      } else if (upper.includes('WARNING') || upper.includes('WARN')) {
-        type = 'warning';
-      } else if (text.startsWith('##[group]') || text.startsWith('##[command]') || text.startsWith('Step ')) {
-        type = 'step';
-        text = text.replace('##[group]', '➔ ').replace('##[command]', '$ ');
-      }
-
-      return { text, type, timestamp };
-    });
-  }, [selectedNode, selectedJobId, jobLogs, loadingLogs, sha, message, checkError]);
-
   // Fetch Workflow Jobs list on mount
   useEffect(() => {
     const loadJobs = async () => {
@@ -159,6 +85,28 @@ export default function PipelineViewer({
     loadJobs();
   }, [owner, repo, sha, runId]);
 
+  // Sort and filter active jobs chronologically by started_at time
+  const activeJobs = useMemo(() => {
+    const list = jobs.length > 0 ? jobs : checkRuns.map((r, idx) => ({
+      id: idx + 1000,
+      run_id: runId || 0,
+      name: r.name,
+      status: r.status,
+      conclusion: r.conclusion,
+      started_at: r.started_at || new Date().toISOString(),
+      completed_at: r.completed_at || new Date().toISOString(),
+      html_url: r.details_url,
+      steps: [],
+    }));
+
+    // Sort chronologically so pipeline order matches execution order
+    return [...list].sort((a, b) => {
+      const timeA = a.started_at ? new Date(a.started_at).getTime() : 0;
+      const timeB = b.started_at ? new Date(b.started_at).getTime() : 0;
+      return timeA - timeB;
+    });
+  }, [jobs, checkRuns, runId]);
+
   // Fetch job logs when a job is selected
   useEffect(() => {
     if (!selectedJobId) return;
@@ -179,6 +127,66 @@ export default function PipelineViewer({
 
     fetchLogs();
   }, [selectedJobId, owner, repo, jobLogs]);
+
+  // Parse raw text logs into LogLine objects
+  const parsedLogs = useMemo<LogLine[]>(() => {
+    if (selectedNode === 'trigger') {
+      const logsList: LogLine[] = [
+        { text: 'Initializing CodeTasker Webhook Pipeline...', type: 'step', timestamp: '12:00:00' },
+        { text: `Git: Received commit [${sha.slice(0, 7)}] - "${message.split('\n')[0]}"`, type: 'info', timestamp: '12:00:01' },
+        { text: 'Git: Refs updated on branch refs/heads/main', type: 'info', timestamp: '12:00:01' },
+        { text: 'Webhook: Payload verified with SHA256 signature.', type: 'info', timestamp: '12:00:02' },
+      ];
+      if (checkError) {
+        logsList.push({ text: `Webhook check status error: ${checkError}`, type: 'error', timestamp: '12:00:03' });
+      }
+      logsList.push({ text: 'Webhook: Task synchronizer triggered in background.', type: 'success', timestamp: '12:00:04' });
+      return logsList;
+    }
+
+    if (!selectedJobId) return [];
+
+    if (loadingLogs[selectedJobId]) {
+      return [{ text: 'Fetching raw build logs from GitHub Actions API...', type: 'step', timestamp: '...' }];
+    }
+
+    const rawText = jobLogs[selectedJobId];
+    if (!rawText) {
+      return [{ text: 'No logs available for this job node.', type: 'warning', timestamp: '...' }];
+    }
+
+    const lines = rawText.split('\n');
+    return lines.map((line) => {
+      const cleanLine = line.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
+
+      let text = cleanLine;
+      let timestamp = '...';
+      const timeMatch = cleanLine.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s(.*)$/);
+      if (timeMatch) {
+        text = timeMatch[2];
+        try {
+          timestamp = new Date(timeMatch[1]).toLocaleTimeString();
+        } catch {
+          timestamp = timeMatch[1].slice(11, 19);
+        }
+      }
+
+      let type: LogLine['type'] = 'info';
+      const upper = text.toUpperCase();
+      if (upper.includes('ERROR') || upper.includes('FAILED') || upper.includes('ERR!')) {
+        type = 'error';
+      } else if (upper.includes('SUCCESS') || upper.includes('OK') || upper.includes('COMPLETE')) {
+        type = 'success';
+      } else if (upper.includes('WARNING') || upper.includes('WARN')) {
+        type = 'warning';
+      } else if (text.startsWith('##[group]') || text.startsWith('##[command]') || text.startsWith('Step ')) {
+        type = 'step';
+        text = text.replace('##[group]', '➔ ').replace('##[command]', '$ ');
+      }
+
+      return { text, type, timestamp };
+    });
+  }, [selectedNode, selectedJobId, jobLogs, loadingLogs, sha, message, checkError]);
 
   // Auto-scroll logs
   useEffect(() => {
@@ -224,24 +232,6 @@ export default function PipelineViewer({
     return 'border-[#2a2a2a] bg-[#161616] hover:border-neutral-500';
   };
 
-  // If jobs are loading or no matching runs exist, default to checkRuns or mock
-  const activeJobs = useMemo(() => {
-    if (jobs.length > 0) return jobs;
-    
-    // Fallback if GitHub jobs haven't synced yet or aren't found
-    return checkRuns.map((r, idx) => ({
-      id: idx + 1000,
-      run_id: runId || 0,
-      name: r.name,
-      status: r.status,
-      conclusion: r.conclusion,
-      started_at: r.started_at,
-      completed_at: r.completed_at,
-      html_url: r.details_url,
-      steps: [],
-    }));
-  }, [jobs, checkRuns, runId]);
-
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-black/85 backdrop-blur-md animate__animated animate__fadeIn"
@@ -274,9 +264,9 @@ export default function PipelineViewer({
             <span className="text-[10px] text-[#666666] font-mono ml-auto">Real-time GitHub Actions Flow</span>
           </div>
 
-          {/* Node Graph Area */}
+          {/* Node Graph Area (Aligned items-center and pt-0 for perfect horizontal flow lines) */}
           <div
-            className="relative overflow-x-auto rounded-lg border border-[#1e1e1e] p-6 bg-[#090909] select-none flex items-start justify-start gap-12 flex-1 min-h-[220px] pt-6"
+            className="relative overflow-x-auto rounded-lg border border-[#1e1e1e] p-6 bg-[#090909] select-none flex items-center justify-start gap-12 flex-1 min-h-[160px] max-h-[180px]"
             style={{
               backgroundImage: 'radial-gradient(#222222 1px, transparent 1px)',
               backgroundSize: '12px 12px',
@@ -315,43 +305,39 @@ export default function PipelineViewer({
                     </marker>
                   </defs>
 
-                  {/* Connector 1: Trigger -> Init */}
-                  <path
-                    d="M 136 74 C 150 74, 160 74, 184 74"
-                    stroke="#10b981"
-                    strokeWidth="2"
-                    fill="none"
-                    strokeDasharray="4 4"
-                    markerEnd="url(#arrow)"
-                  />
-
-                  {/* Connector 2: Init -> Job Nodes */}
+                  {/* Horizontal Connector lines between sequential nodes */}
                   {activeJobs.map((job, idx) => {
+                    const startX = 200 + idx * 224;
+                    const endX = 248 + idx * 224;
                     const startY = 74;
-                    const endY = 52 + idx * 68; // Height 56px + gap 12px
+                    const endY = 74;
+
                     const strokeColor = job.conclusion === 'failure' ? '#ef4444' : '#10b981';
                     const arrowMarker = job.conclusion === 'failure' ? 'url(#arrow-fail)' : 'url(#arrow)';
+                    const isDashed = job.status !== 'completed';
+
                     return (
                       <path
                         key={`path-${idx}`}
-                        d={`M 312 ${startY} C 330 ${startY}, 340 ${endY}, 360 ${endY}`}
+                        d={`M ${startX} ${startY} L ${endX} ${endY}`}
                         stroke={strokeColor}
-                        strokeWidth="1.5"
+                        strokeWidth="2"
                         fill="none"
+                        strokeDasharray={isDashed ? '4 4' : undefined}
                         markerEnd={arrowMarker}
                       />
                     );
                   })}
                 </svg>
 
-                {/* Column 1: Trigger (Margin top 24px/mt-6 so center is at 74px) */}
-                <div className="relative z-10 flex flex-col mt-6 shrink-0">
+                {/* Node 0: Trigger */}
+                <div className="relative z-10 flex flex-col shrink-0">
                   <div
                     onClick={() => {
                       setSelectedNode('trigger');
                       setSelectedJobId(null);
                     }}
-                    className={`relative w-28 rounded-md border p-2 cursor-pointer transition-all text-left ${getNodeBorder(
+                    className={`relative w-44 h-[56px] rounded-md border p-2.5 cursor-pointer transition-all text-left flex flex-col justify-center ${getNodeBorder(
                       'trigger',
                       'completed',
                       'success'
@@ -367,49 +353,28 @@ export default function PipelineViewer({
                   </div>
                 </div>
 
-                {/* Column 2: CI Init (Margin top 24px/mt-6 so center is at 74px) */}
-                <div className="relative z-10 flex flex-col mt-6 shrink-0">
-                  <div
-                    onClick={() => {
-                      setSelectedNode('ci-init');
-                      setSelectedJobId(null);
-                    }}
-                    className={`relative w-32 rounded-md border p-2 cursor-pointer transition-all text-left ${getNodeBorder(
-                      'ci-init',
-                      'completed',
-                      'success'
-                    )}`}
-                  >
-                    {/* n8n style port dots */}
-                    <div className="absolute left-[-4px] top-1/2 translate-y-[-50%] w-2 h-2 rounded-full bg-emerald-400 border border-[#0c0c0c] z-20" />
-                    <div className="absolute right-[-4px] top-1/2 translate-y-[-50%] w-2 h-2 rounded-full bg-emerald-400 border border-[#0c0c0c] z-20" />
-                    <div className="flex items-center gap-1.5">
-                      <Zap size={11} className="text-emerald-400" />
-                      <span className="text-[10px] font-bold text-white font-mono uppercase">CI Setup</span>
-                    </div>
-                    <p className="mt-1 truncate font-mono text-[9px] text-[#666666]">github-actions</p>
-                  </div>
-                </div>
-
-                {/* Column 3: Jobs List Column */}
-                <div className="relative z-10 flex flex-col gap-3 shrink-0">
-                  {activeJobs.map((job, idx) => {
-                    const dotColor = job.conclusion === 'failure' ? 'bg-red-400' : 'bg-emerald-400';
-                    return (
+                {/* Nodes 1..N: Sequential Job Nodes */}
+                {activeJobs.map((job, idx) => {
+                  const isLast = idx === activeJobs.length - 1;
+                  const dotColor = job.conclusion === 'failure' ? 'bg-red-400' : 'bg-emerald-400';
+                  return (
+                    <div key={job.id} className="relative z-10 flex flex-col shrink-0">
                       <div
-                        key={idx}
                         onClick={() => {
                           setSelectedNode(job.name);
                           setSelectedJobId(job.id);
                         }}
-                        className={`relative w-42 rounded-md border p-2.5 cursor-pointer transition-all text-left flex items-center justify-between gap-2 h-[56px] ${getNodeBorder(
+                        className={`relative w-44 h-[56px] rounded-md border p-2.5 cursor-pointer transition-all text-left flex items-center justify-between gap-2 ${getNodeBorder(
                           job.name,
                           job.status,
                           job.conclusion
                         )}`}
                       >
-                        {/* n8n style port dot */}
+                        {/* n8n style port dots */}
                         <div className={`absolute left-[-4px] top-1/2 translate-y-[-50%] w-2 h-2 rounded-full ${dotColor} border border-[#0c0c0c] z-20`} />
+                        {!isLast && (
+                          <div className="absolute right-[-4px] top-1/2 translate-y-[-50%] w-2 h-2 rounded-full bg-emerald-400 border border-[#0c0c0c] z-20" />
+                        )}
                         <div className="min-w-0">
                           <span className="text-[10px] font-bold text-white font-mono uppercase truncate block">
                             {job.name}
@@ -418,15 +383,15 @@ export default function PipelineViewer({
                         </div>
                         <div className="shrink-0">{getStatusIcon(job.status, job.conclusion)}</div>
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })}
               </>
             )}
           </div>
 
           {/* Terminal Log Console */}
-          <div className="rounded-lg border border-[#1e1e1e] bg-[#050505] flex flex-col overflow-hidden shrink-0">
+          <div className="rounded-lg border border-[#1e1e1e] bg-[#050505] flex flex-col overflow-hidden flex-1 min-h-[200px]">
             {/* Terminal Header */}
             <div className="flex h-8 items-center border-b border-[#131313] px-3 bg-[#0d0d0d] justify-between">
               <div className="flex items-center gap-2">
@@ -443,7 +408,7 @@ export default function PipelineViewer({
             </div>
 
             {/* Console logs output */}
-            <div className="p-3 font-mono text-[10px] overflow-y-auto flex flex-col gap-1 leading-5 text-left bg-black/90 h-[250px]">
+            <div className="p-3 font-mono text-[10px] overflow-y-auto flex flex-col gap-1 leading-5 text-left bg-black/90 flex-1">
               {parsedLogs.map((log, idx) => {
                 let colorClass = 'text-[#a0a0a0]';
                 if (log.type === 'step') colorClass = 'text-sky-400 font-bold';
