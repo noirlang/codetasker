@@ -14,10 +14,12 @@ import {
   MinusCircle,
   RefreshCw,
   XCircle,
+  Zap,
 } from 'lucide-react';
 import { reposApi } from '../api/client';
 import type { ActionWorkflow, ActionWorkflowRun, ApiError } from '../types';
 import Spinner from './ui/Spinner';
+import PipelineViewer from './PipelineViewer';
 
 interface ActionsPanelProps {
   owner: string;
@@ -125,6 +127,7 @@ export default function ActionsPanel({ owner, repoName, currentBranch }: Actions
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
 
   const latestRunByWorkflow = useMemo(() => {
     const latest = new Map<number, ActionWorkflowRun>();
@@ -319,7 +322,21 @@ export default function ActionsPanel({ owner, repoName, currentBranch }: Actions
                     </div>
 
                     <div className="mt-2 flex items-center justify-between gap-2">
-                      <RunBadge run={run} />
+                      <div className="flex items-center gap-2">
+                        <RunBadge run={run} />
+                        <button
+                          onClick={() => setExpandedRunId(prev => prev === run.id ? null : run.id)}
+                          className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold transition-all duration-150 cursor-pointer ${
+                            expandedRunId === run.id
+                              ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                              : 'bg-[#111111] border-[#2a2a2a] text-[#888888] hover:border-amber-500/40 hover:text-amber-300'
+                          }`}
+                          title="Show Pipeline Flow"
+                        >
+                          <Zap size={9} />
+                          Flow
+                        </button>
+                      </div>
                       <span className="font-mono text-[9px] text-[#666666]">
                         {formatDate(run.run_started_at || run.created_at)}
                       </span>
@@ -351,6 +368,17 @@ export default function ActionsPanel({ owner, repoName, currentBranch }: Actions
                         <span className="truncate text-[10px] text-[#666666]">
                           by {run.actor}
                         </span>
+                      </div>
+                    )}
+
+                    {expandedRunId === run.id && (
+                      <div className="mt-3">
+                        <PipelineViewer
+                          sha={run.head_sha || ''}
+                          message={run.display_title || run.name || ''}
+                          checkState={run.conclusion === 'success' ? 'success' : run.conclusion === 'failure' ? 'failure' : 'pending'}
+                          checkRuns={[]}
+                        />
                       </div>
                     )}
                   </div>
