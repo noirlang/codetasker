@@ -16,10 +16,12 @@ import {
   User,
   UserCheck,
   XCircle,
+  Zap,
 } from 'lucide-react';
 import { reposApi } from '../api/client';
 import type { Commit, ApiError, CommitCheckState } from '../types';
 import Spinner from './ui/Spinner';
+import PipelineViewer from './PipelineViewer';
 
 interface CommitHistoryPanelProps {
   owner: string;
@@ -88,6 +90,7 @@ export default function CommitHistoryPanel({
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<CommitFilter>('all');
   const [nextPage, setNextPage] = useState<number>(0);
+  const [expandedCommitSha, setExpandedCommitSha] = useState<string | null>(null);
 
   const fetchCommits = async (page = 1) => {
     const loadingMore = page > 1;
@@ -272,7 +275,26 @@ export default function CommitHistoryPanel({
                       <span className="text-white/70 bg-white/5 border border-white/10 px-1 py-0.5 rounded font-mono text-[9px]">
                         {commit.sha.slice(0, 7)}
                       </span>
-                      {renderCheckBadge(commit.check_state, commit.check_total)}
+                      <div className="flex items-center gap-2">
+                        {renderCheckBadge(commit.check_state, commit.check_total)}
+                        {commit.check_state !== 'none' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedCommitSha(prev => prev === commit.sha ? null : commit.sha);
+                            }}
+                            className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold transition-all duration-150 cursor-pointer ${
+                              expandedCommitSha === commit.sha
+                                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                                : 'bg-[#111111] border-[#2a2a2a] text-[#888888] hover:border-amber-500/40 hover:text-amber-300'
+                            }`}
+                            title="Show CI/CD Pipeline Flow"
+                          >
+                            <Zap size={9} className={commit.check_state === 'pending' ? 'animate-pulse' : ''} />
+                            Flow
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between gap-2 text-[9px] font-mono text-[#666666]">
@@ -327,6 +349,16 @@ export default function CommitHistoryPanel({
                         </div>
                       )}
                     </div>
+
+                    {expandedCommitSha === commit.sha && (
+                      <PipelineViewer
+                        sha={commit.sha}
+                        message={commit.message}
+                        checkState={commit.check_state}
+                        checkRuns={commit.check_runs}
+                        checkError={commit.check_error}
+                      />
+                    )}
 
                     {hasCheckDetails && (
                       <details className="rounded border border-[#242424] bg-[#111111]">
