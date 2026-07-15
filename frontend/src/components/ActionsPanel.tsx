@@ -378,6 +378,7 @@ export default function ActionsPanel({ owner, repoName, currentBranch }: Actions
                           message={run.display_title || run.name || ''}
                           checkState={run.conclusion === 'success' ? 'success' : run.conclusion === 'failure' ? 'failure' : 'pending'}
                           checkRuns={[]}
+                          onClose={() => setExpandedRunId(null)}
                         />
                       </div>
                     )}

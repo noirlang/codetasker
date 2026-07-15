@@ -357,6 +357,7 @@ export default function CommitHistoryPanel({
                         checkState={commit.check_state}
                         checkRuns={commit.check_runs}
                         checkError={commit.check_error}
+                        onClose={() => setExpandedCommitSha(null)}
                       />
                     )}
 
