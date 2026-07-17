@@ -285,7 +285,7 @@ function DocsContent() {
         </div>
         <div className="grid gap-3 md:grid-cols-3">
           {[
-            'Open CodeTasker from http://localhost:5173 during local testing.',
+            'Open CodeTasker from https://codetasker.noirlang.tr during local testing.',
             'Use the same browser session for CodeTasker and GitHub approval.',
             'If state mismatch appears, close the stale callback tab and sign in again.',
           ].map((step) => (
