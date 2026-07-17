@@ -92,11 +92,11 @@ MONGO_URI=mongodb://localhost:27017
 DB_NAME=codetasker
 GITHUB_CLIENT_ID=your_github_oauth_client_id
 GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
-GITHUB_REDIRECT_URL=http://localhost:8080/api/auth/github/callback
+GITHUB_REDIRECT_URL=https://codetasker.noirlang.tr/api/auth/github/callback
 JWT_SECRET=your_jwt_signing_secret
 WEBHOOK_SECRET=your_github_webhook_hmac_secret
 TOKEN_ENCRYPT_KEY=your_aes_32byte_encryption_key
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=https://codetasker.noirlang.tr
 ```
 
 ### 2. Run the Backend
