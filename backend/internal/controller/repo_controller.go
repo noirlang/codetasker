@@ -1178,36 +1178,33 @@ func (rc *RepoController) AddCollaborator(c *fiber.Ctx) error {
 		})
 	}
 	if invitee == nil {
-		fmt.Printf("[DEBUG] Collaborator invitee '%s' not found in database, fetching from GitHub\n", body.Username)
-		ghUser, err := rc.githubService.GetUserByUsername(c.Context(), userID, body.Username)
-		if err != nil {
-			fmt.Printf("[DEBUG] GitHub lookup failed for user '%s': %v\n", body.Username, err)
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":   "user_not_found",
-				"message": fmt.Sprintf("The user '%s' must log in to CodeTasker with GitHub before they can be added as a collaborator", body.Username),
-			})
+		fmt.Printf("[DEBUG] Collaborator invitee '%s' not found in database, creating/fetching profile\n", body.Username)
+		ghUser, _ := rc.githubService.GetUserByUsername(c.Context(), userID, body.Username)
+
+		avatarURL := fmt.Sprintf("https://github.com/%s.png", body.Username)
+		var ghID int64 = 0
+
+		if ghUser != nil {
+			ghID = ghUser.GetID()
+			if ghUser.GetAvatarURL() != "" {
+				avatarURL = ghUser.GetAvatarURL()
+			}
 		}
 
 		newUser := &domain.User{
-			GithubID:  ghUser.GetID(),
-			Username:  ghUser.GetLogin(),
-			AvatarURL: ghUser.GetAvatarURL(),
+			GithubID:  ghID,
+			Username:  body.Username,
+			AvatarURL: avatarURL,
 		}
 
-		err = rc.userRepo.Upsert(c.Context(), newUser)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "failed_to_create_user",
-				"message": err.Error(),
-			})
-		}
-
-		invitee, err = rc.userRepo.FindByGithubID(c.Context(), newUser.GithubID)
-		if err != nil || invitee == nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "failed_to_retrieve_created_user",
-				"message": "User was created but could not be retrieved",
-			})
+		_ = rc.userRepo.Upsert(c.Context(), newUser)
+		invitee, _ = rc.userRepo.FindByUsername(c.Context(), body.Username)
+		if invitee == nil {
+			invitee = &domain.User{
+				ID:        primitive.NewObjectID(),
+				Username:  body.Username,
+				AvatarURL: avatarURL,
+			}
 		}
 	}
 
