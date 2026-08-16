@@ -126,6 +126,7 @@ function TaskDetailModal({
   const [submitting, setSubmitting] = useState(false);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
 
   // Proposals & Discussions state
   const [proposals, setProposals] = useState<TaskProposal[]>([]);
@@ -302,38 +303,86 @@ function TaskDetailModal({
 
             {/* Assignee picker dropdown */}
             {showAssigneePicker && (
-              <div className="mt-2 rounded border border-[#222222] bg-[#0d0d0d] overflow-hidden">
+              <div className="mt-2 rounded border border-[#222222] bg-[#0d0d0d] p-2 flex flex-col gap-2">
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={assigneeSearch}
+                    onChange={(e) => setAssigneeSearch(e.target.value)}
+                    placeholder="Enter GitHub username..."
+                    className="flex-1 rounded border border-[#2a2a2a] bg-[#111111] px-2.5 py-1 text-xs text-white placeholder-[#555555] focus:outline-none focus:border-white"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && assigneeSearch.trim()) {
+                        e.preventDefault();
+                        handleAssign(assigneeSearch.trim());
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (assigneeSearch.trim()) {
+                        handleAssign(assigneeSearch.trim());
+                      }
+                    }}
+                    disabled={!assigneeSearch.trim()}
+                    className="btn-primary py-1 px-2.5 text-[10px] font-mono shrink-0 disabled:opacity-40"
+                  >
+                    Assign
+                  </button>
+                </div>
+
+                {/* Direct quick action: Assign to me */}
+                {currentUsername && (
+                  <button
+                    onClick={() => handleAssign(currentUsername)}
+                    className="flex items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-[#a0a0a0] hover:text-white hover:bg-[#161616] rounded transition-colors cursor-pointer"
+                  >
+                    <User size={12} className="text-[#a0a0a0]" />
+                    <span>Assign to me (@{currentUsername})</span>
+                  </button>
+                )}
+
+                {/* Clear assignee */}
                 {localAssignee && (
                   <button
                     onClick={() => handleAssign(null)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-[#a0a0a0] hover:bg-[#161616] transition-colors cursor-pointer border-b border-[#1a1a1a]"
+                    className="flex items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-red-400/80 hover:text-red-400 hover:bg-[#161616] rounded transition-colors cursor-pointer"
                   >
-                    <UserMinus size={12} className="text-[#666666]" />
-                    Clear assignee
+                    <UserMinus size={12} />
+                    <span>Clear assignee</span>
                   </button>
                 )}
-                {collaborators.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => handleAssign(c.username)}
-                    className={[
-                      'flex w-full items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer',
-                      localAssignee === c.username
-                        ? 'bg-white/[0.04] text-white'
-                        : 'text-[#a0a0a0] hover:bg-[#161616]',
-                    ].join(' ')}
-                  >
-                    <img
-                      src={c.avatar_url}
-                      alt={c.username}
-                      className="h-5 w-5 rounded-full border border-[#2a2a2a] shrink-0"
-                    />
-                    <span className="text-[11px] truncate">{c.username}</span>
-                    <span className="ml-auto text-[9px] font-mono text-[#666666] capitalize">{c.role}</span>
-                  </button>
-                ))}
-                {collaborators.length === 0 && (
-                  <p className="px-3 py-3 text-[10px] text-[#666666]">No collaborators found</p>
+
+                {/* Filtered Collaborator List */}
+                {collaborators.length > 0 && (
+                  <div className="border-t border-[#1a1a1a] pt-1.5 max-h-36 overflow-y-auto flex flex-col gap-1">
+                    {collaborators
+                      .filter((c) =>
+                        assigneeSearch.trim()
+                          ? c.username.toLowerCase().includes(assigneeSearch.trim().toLowerCase())
+                          : true
+                      )
+                      .map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => handleAssign(c.username)}
+                          className={[
+                            'flex w-full items-center gap-2 px-2.5 py-1.5 rounded text-left transition-colors cursor-pointer',
+                            localAssignee === c.username
+                              ? 'bg-white/[0.06] text-white font-medium'
+                              : 'text-[#a0a0a0] hover:bg-[#161616] hover:text-white',
+                          ].join(' ')}
+                        >
+                          <img
+                            src={c.avatar_url}
+                            alt={c.username}
+                            className="h-4 w-4 rounded-full border border-[#2a2a2a] shrink-0"
+                          />
+                          <span className="text-[11px] truncate">{c.username}</span>
+                          <span className="ml-auto text-[9px] font-mono text-[#666666] capitalize">{c.role}</span>
+                        </button>
+                      ))}
+                  </div>
                 )}
               </div>
             )}

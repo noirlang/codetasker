@@ -220,30 +220,30 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 		})
 	} else if req.AssigneeUsername != "" {
 		// Look up the assignee in the user repository.
-		assignee, err := tc.userRepo.FindByUsername(c.Context(), req.AssigneeUsername)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "database_error",
-				"message": err.Error(),
-			})
-		}
-		if assignee == nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":   "user_not_found",
-				"message": fmt.Sprintf("user '%s' is not registered in CodeTasker", req.AssigneeUsername),
-			})
+		assignee, _ := tc.userRepo.FindByUsername(c.Context(), req.AssigneeUsername)
+
+		var targetUserID *primitive.ObjectID
+		avatarURL := fmt.Sprintf("https://github.com/%s.png", req.AssigneeUsername)
+		assigneeName := req.AssigneeUsername
+
+		if assignee != nil {
+			targetUserID = &assignee.ID
+			assigneeName = assignee.Username
+			if assignee.AvatarURL != "" {
+				avatarURL = assignee.AvatarURL
+			}
 		}
 
 		// Persist the assignee.
-		if err := tc.taskRepo.UpdateAssignee(c.Context(), taskObjID, &assignee.ID, assignee.Username, assignee.AvatarURL); err != nil {
+		if err := tc.taskRepo.UpdateAssignee(c.Context(), taskObjID, targetUserID, assigneeName, avatarURL); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error":   "update_failed",
 				"message": err.Error(),
 			})
 		}
 
-		// Create an in-app notification for the assignee (skip if self-assigning).
-		if assignee.ID != userID {
+		// Create an in-app notification for the assignee if registered (skip if self-assigning).
+		if assignee != nil && assignee.ID != userID {
 			_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
 				UserID:  assignee.ID,
 				Type:    domain.NotifTaskAssigned,
