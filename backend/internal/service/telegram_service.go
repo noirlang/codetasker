@@ -111,3 +111,29 @@ func (s *TelegramService) SendTaskCompleted(ctx context.Context, token, chatID, 
 	)
 	return s.send(ctx, token, chatID, msg)
 }
+
+// SendProposalCreated sends a Telegram message when a new proposal is created on a task.
+func (s *TelegramService) SendProposalCreated(ctx context.Context, token, chatID, toName, authorName, proposalTitle, taskContent, repoName string) error {
+	msg := fmt.Sprintf(
+		"💡 <b>New Proposal Submitted</b>\n\n"+
+			"Hi <b>%s</b>, <b>%s</b> submitted a proposal in <b>%s</b>:\n\n"+
+			"Task: <i>\"%s\"</i>\n"+
+			"Proposal: <b>\"%s\"</b>",
+		toName, authorName, repoName, taskContent, proposalTitle,
+	)
+	return s.send(ctx, token, chatID, msg)
+}
+
+// SendProposalResolved sends a Telegram message when a proposal status is updated (Approved/Rejected).
+func (s *TelegramService) SendProposalResolved(ctx context.Context, token, chatID, toName, reviewerName, proposalTitle, status string) error {
+	emoji := "✅"
+	if status == "rejected" {
+		emoji = "❌"
+	}
+	msg := fmt.Sprintf(
+		"%s <b>Proposal Status Updated</b>\n\n"+
+			"Hi <b>%s</b>, your proposal <b>\"%s\"</b> was <b>%s</b> by <b>%s</b>.",
+		emoji, toName, proposalTitle, status, reviewerName,
+	)
+	return s.send(ctx, token, chatID, msg)
+}

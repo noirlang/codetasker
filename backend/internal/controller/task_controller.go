@@ -242,8 +242,8 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 			})
 		}
 
-		// Create an in-app notification for the assignee if registered (skip if self-assigning).
-		if assignee != nil && assignee.ID != userID {
+		// Create an in-app notification for the assignee.
+		if assignee != nil {
 			_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
 				UserID:  assignee.ID,
 				Type:    domain.NotifTaskAssigned,
@@ -251,6 +251,29 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 				Message: fmt.Sprintf("%s assigned you to: %s", actorName, task.Content),
 				Link:    fmt.Sprintf("/repos/%s/tasks", task.RepoName),
 			})
+
+			// Send email notification (non-fatal if SMTP is not configured).
+			_ = tc.emailService.SendTaskAssigned(
+				assignee.Email,
+				assignee.Username,
+				actorName,
+				task.Content,
+				task.RepoName,
+				"",
+			)
+
+			// Send Telegram notification (non-fatal if not configured).
+			if assignee.TelegramEnabled && assignee.TelegramBotToken != "" && assignee.TelegramChatID != "" {
+				_ = tc.telegramService.SendTaskAssigned(
+					c.Context(),
+					assignee.TelegramBotToken,
+					assignee.TelegramChatID,
+					assignee.Username,
+					actorName,
+					task.Content,
+					task.RepoName,
+				)
+			}
 		}
 
 		// Log the assignment activity.
@@ -266,29 +289,6 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 			TargetLabel: task.Content,
 			Meta:        map[string]string{"assignee": req.AssigneeUsername},
 		})
-
-		// Send email notification (non-fatal if SMTP is not configured).
-		_ = tc.emailService.SendTaskAssigned(
-			assignee.Email,
-			assignee.Username,
-			actorName,
-			task.Content,
-			task.RepoName,
-			"",
-		)
-
-		// Send Telegram notification (non-fatal if not configured).
-		if assignee.TelegramEnabled && assignee.TelegramBotToken != "" && assignee.TelegramChatID != "" {
-			_ = tc.telegramService.SendTaskAssigned(
-				c.Context(),
-				assignee.TelegramBotToken,
-				assignee.TelegramChatID,
-				assignee.Username,
-				actorName,
-				task.Content,
-				task.RepoName,
-			)
-		}
 	}
 
 	// ── Handle completion tracking (when status becomes resolved) ──────────────
@@ -631,41 +631,42 @@ func (tc *TaskController) AddComment(c *fiber.Ctx) error {
 		})
 	}
 
-	// Notify the task's assignee if they are different from the commenter.
-	if task.AssigneeID != nil && *task.AssigneeID != userID {
-		_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
-			UserID:  *task.AssigneeID,
-			Type:    domain.NotifCommentAdded,
-			Title:   "New comment on your task",
-			Message: fmt.Sprintf("%s commented: %s", commenter.Username, req.Content),
-			Link:    fmt.Sprintf("/repos/%s/tasks", task.RepoName),
-		})
+	// Notify assignee or commenter
+	targetUserID := userID
+	if task.AssigneeID != nil {
+		targetUserID = *task.AssigneeID
+	}
 
-		// Send email notification to the assignee
-		if assignee, err := tc.userRepo.FindByObjectID(c.Context(), *task.AssigneeID); err == nil && assignee != nil {
-			_ = tc.emailService.SendCommentNotification(
-				assignee.Email,
-				assignee.Username,
+	_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
+		UserID:  targetUserID,
+		Type:    domain.NotifCommentAdded,
+		Title:   "New comment on task",
+		Message: fmt.Sprintf("%s commented: %s", commenter.Username, req.Content),
+		Link:    fmt.Sprintf("/repos/%s/tasks", task.RepoName),
+	})
+
+	if targetUser, err := tc.userRepo.FindByObjectID(c.Context(), targetUserID); err == nil && targetUser != nil {
+		_ = tc.emailService.SendCommentNotification(
+			targetUser.Email,
+			targetUser.Username,
+			commenter.Username,
+			task.Content,
+			req.Content,
+			task.RepoName,
+			"",
+		)
+
+		if targetUser.TelegramEnabled && targetUser.TelegramBotToken != "" && targetUser.TelegramChatID != "" {
+			_ = tc.telegramService.SendCommentNotification(
+				c.Context(),
+				targetUser.TelegramBotToken,
+				targetUser.TelegramChatID,
+				targetUser.Username,
 				commenter.Username,
 				task.Content,
 				req.Content,
 				task.RepoName,
-				"",
 			)
-
-			// Send Telegram notification to the assignee
-			if assignee.TelegramEnabled && assignee.TelegramBotToken != "" && assignee.TelegramChatID != "" {
-				_ = tc.telegramService.SendCommentNotification(
-					c.Context(),
-					assignee.TelegramBotToken,
-					assignee.TelegramChatID,
-					assignee.Username,
-					commenter.Username,
-					task.Content,
-					req.Content,
-					task.RepoName,
-				)
-			}
 		}
 	}
 
@@ -849,16 +850,34 @@ func (tc *TaskController) AddProposal(c *fiber.Ctx) error {
 		})
 	}
 
-	// Create notification for task maintainer/assignee if present
-	if task.AssigneeID != nil && *task.AssigneeID != userID {
-		_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
-			UserID:    *task.AssigneeID,
-			Type:      domain.NotifProposalCreated,
-			Title:     "New proposal on assigned task",
-			Message:   fmt.Sprintf("%s proposed '%s' on task %s", user.Username, proposal.Title, task.Content),
-			Link:      fmt.Sprintf("/repos/%s?taskId=%s", task.RepoName, task.ID.Hex()),
-			CreatedAt: time.Now(),
-		})
+	// Create notification & Telegram alert
+	targetUserID := userID
+	if task.AssigneeID != nil {
+		targetUserID = *task.AssigneeID
+	}
+
+	_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
+		UserID:    targetUserID,
+		Type:      domain.NotifProposalCreated,
+		Title:     "New proposal on task",
+		Message:   fmt.Sprintf("%s proposed '%s' on task %s", user.Username, proposal.Title, task.Content),
+		Link:      fmt.Sprintf("/repos/%s?taskId=%s", task.RepoName, task.ID.Hex()),
+		CreatedAt: time.Now(),
+	})
+
+	if targetUser, err := tc.userRepo.FindByObjectID(c.Context(), targetUserID); err == nil && targetUser != nil {
+		if targetUser.TelegramEnabled && targetUser.TelegramBotToken != "" && targetUser.TelegramChatID != "" {
+			_ = tc.telegramService.SendProposalCreated(
+				c.Context(),
+				targetUser.TelegramBotToken,
+				targetUser.TelegramChatID,
+				targetUser.Username,
+				user.Username,
+				proposal.Title,
+				task.Content,
+				task.RepoName,
+			)
+		}
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -915,20 +934,33 @@ func (tc *TaskController) UpdateProposalStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	// Notify proposal creator
-	if proposal.UserID != userID {
-		statusLabel := "approved"
-		if req.Status == domain.ProposalStatusRejected {
-			statusLabel = "rejected"
+	// Notify proposal creator & send Telegram
+	statusLabel := "approved"
+	if req.Status == domain.ProposalStatusRejected {
+		statusLabel = "rejected"
+	}
+
+	_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
+		UserID:    proposal.UserID,
+		Type:      domain.NotifProposalResolved,
+		Title:     fmt.Sprintf("Proposal %s by %s", statusLabel, user.Username),
+		Message:   fmt.Sprintf("Your proposal '%s' was %s", proposal.Title, statusLabel),
+		Link:      fmt.Sprintf("/tasks?proposalId=%s", proposalObjID.Hex()),
+		CreatedAt: time.Now(),
+	})
+
+	if authorUser, err := tc.userRepo.FindByObjectID(c.Context(), proposal.UserID); err == nil && authorUser != nil {
+		if authorUser.TelegramEnabled && authorUser.TelegramBotToken != "" && authorUser.TelegramChatID != "" {
+			_ = tc.telegramService.SendProposalResolved(
+				c.Context(),
+				authorUser.TelegramBotToken,
+				authorUser.TelegramChatID,
+				authorUser.Username,
+				user.Username,
+				proposal.Title,
+				statusLabel,
+			)
 		}
-		_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
-			UserID:    proposal.UserID,
-			Type:      domain.NotifProposalResolved,
-			Title:     fmt.Sprintf("Proposal %s by %s", statusLabel, user.Username),
-			Message:   fmt.Sprintf("Your proposal '%s' was %s", proposal.Title, statusLabel),
-			Link:      fmt.Sprintf("/tasks?proposalId=%s", proposalObjID.Hex()),
-			CreatedAt: time.Now(),
-		})
 	}
 
 	return c.JSON(fiber.Map{
