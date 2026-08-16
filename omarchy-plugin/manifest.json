@@ -5,10 +5,10 @@
   "version": "1.0.0",
   "author": "CodeTasker Team",
   "license": "MIT",
-  "description": "CodeTasker notifications widget for Omarchy top bar with </ > icon and dark themed popover panel.",
+  "description": "CodeTasker notifications widget — shows unread count and lets you browse notifications directly from the Omarchy bar.",
   "kinds": ["bar-widget"],
   "entryPoints": {
-    "barWidget": "BarWidget.qml"
+    "barWidget": "Panel.qml"
   },
   "barWidget": {
     "displayName": "CodeTasker Notifications",
