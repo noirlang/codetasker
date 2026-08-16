@@ -68,7 +68,7 @@ Panel {
   }
 
   function saveSettings() {
-    serverUrl = serverInput ? serverInput.text.trim() || "https://codetasker.noirlang.tr" : "https://codetasker.noirlang.tr"
+    serverUrl = serverInput ? (serverInput.text.trim() || "https://codetasker.noirlang.tr") : "https://codetasker.noirlang.tr"
     appToken = tokenInput ? tokenInput.text.trim() : ""
 
     Api.setSetting("serverUrl", serverUrl)
@@ -132,18 +132,15 @@ Panel {
     function refresh(): string { root.refresh(); return "ok" }
   }
 
-  WidgetButton {
+  // Native Omarchy Bar Icon Button matching system bar widgets
+  BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "</>" + (root.unreadCount > 0 ? (" (" + root.unreadCount + ")") : "")
-    labelVisible: true
-    hasVisualContent: true
-    horizontalMargin: 8.75
-    verticalPadding: 8.75
-
-    // Color rule: Red (#ef4444) if unreadCount > 0, White (#ffffff) if unreadCount == 0
-    foreground: root.unreadCount > 0 ? "#ef4444" : "#ffffff"
+    text: "" // FontAwesome / Nerd Font code icon (< />)
+    active: root.unreadCount > 0
+    activeColor: "#ef4444"
+    tooltipText: root.unreadCount > 0 ? ("CodeTasker (" + root.unreadCount + " unread)") : "CodeTasker Notifications"
 
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton || buttonCode === Qt.MiddleButton) {
@@ -160,9 +157,9 @@ Panel {
     owner: root
     bar: root.bar
     open: root.opened
-    centerOnBar: false
+    focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(Style.space(480))
+    contentHeight: panel.fittedContentHeight(contentCol.implicitHeight + Style.space(32), Style.space(520))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -170,16 +167,18 @@ Panel {
       blocked: (serverInput && serverInput.activeFocus) || (tokenInput && tokenInput.activeFocus)
       onCloseRequested: root.close()
 
-      Rectangle {
+      Flickable {
         anchors.fill: parent
-        color: "#0a0a0a"
-        radius: 8
-        border.color: "#262626"
-        border.width: 1
+        anchors.margins: Style.space(16)
+        contentWidth: width
+        contentHeight: contentCol.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        interactive: contentHeight > height
 
         ColumnLayout {
-          anchors.fill: parent
-          anchors.margins: Style.space(16)
+          id: contentCol
+          width: parent.width
           spacing: Style.space(12)
 
           // ── Header ────────────────────────────────────────────────────────
@@ -188,10 +187,10 @@ Panel {
             spacing: 8
 
             Text {
-              text: "</>"
+              text: ""
               font.bold: true
               font.pixelSize: 15
-              font.family: Style.font.family
+              font.family: root.fontFamily
               color: "#10b981"
             }
 
@@ -200,11 +199,11 @@ Panel {
               font.bold: true
               font.pixelSize: 13
               color: "#ffffff"
-              font.family: Style.font.family
+              font.family: root.fontFamily
               Layout.fillWidth: true
             }
 
-            // Unread badge
+            // Unread count badge
             Rectangle {
               visible: !isSetupMode && notificationsList.length > 0
               implicitWidth: Math.max(18, unreadText.implicitWidth + 8)
@@ -280,7 +279,6 @@ Panel {
           ColumnLayout {
             visible: isSetupMode
             Layout.fillWidth: true
-            Layout.fillHeight: true
             spacing: 12
 
             Text {
@@ -288,7 +286,7 @@ Panel {
               font.bold: true
               font.pixelSize: 14
               color: "#ffffff"
-              font.family: Style.font.family
+              font.family: root.fontFamily
             }
 
             Text {
@@ -297,7 +295,7 @@ Panel {
               Layout.fillWidth: true
               font.pixelSize: 11
               color: "#888888"
-              font.family: Style.font.family
+              font.family: root.fontFamily
             }
 
             ColumnLayout {
@@ -375,8 +373,6 @@ Panel {
               Layout.fillWidth: true
             }
 
-            Item { Layout.fillHeight: true }
-
             Rectangle {
               Layout.fillWidth: true
               implicitHeight: 34
@@ -405,7 +401,6 @@ Panel {
           ColumnLayout {
             visible: !isSetupMode
             Layout.fillWidth: true
-            Layout.fillHeight: true
             spacing: 8
 
             Text {
@@ -434,16 +429,10 @@ Panel {
               Layout.alignment: Qt.AlignHCenter
             }
 
-            ListView {
-              visible: !isLoading && notificationsList.length > 0
-              Layout.fillWidth: true
-              Layout.fillHeight: true
-              clip: true
-              spacing: 6
+            Repeater {
               model: notificationsList
-
               delegate: Rectangle {
-                width: ListView.view.width
+                Layout.fillWidth: true
                 implicitHeight: itemCol.implicitHeight + 16
                 radius: 6
                 color: "#141414"
