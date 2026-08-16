@@ -24,7 +24,7 @@ Panel {
   property bool isLoading: false
   property string errorMessage: ""
 
-  readonly property bool opened: root.controller ? root.controller.visible === true : false
+  property bool opened: false
 
   function open() {
     loadSettings()
@@ -33,16 +33,16 @@ Panel {
     } else {
       loadNotifications()
     }
-    if (root.controller) root.controller.show()
+    opened = true
   }
 
   function close() {
-    if (root.controller) root.controller.hide()
+    opened = false
   }
 
   function toggle() {
-    if (root.opened) root.close()
-    else root.open()
+    if (opened) close()
+    else open()
   }
 
   function loadSettings() {
