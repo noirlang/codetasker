@@ -7,9 +7,8 @@
   "license": "MIT",
   "description": "CodeTasker notifications widget for Omarchy top bar with </ > icon and dark themed popover panel.",
   "kinds": ["bar-widget"],
-  "activation": "on-demand",
   "entryPoints": {
-    "barWidget": "Panel.qml"
+    "barWidget": "BarWidget.qml"
   },
   "barWidget": {
     "displayName": "CodeTasker Notifications",

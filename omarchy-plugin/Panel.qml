@@ -13,6 +13,10 @@ Panel {
   ipcTarget: "codetasker.notifications"
   manageIpc: false
 
+  property var anchorItem: null
+  property var hostWidget: null
+  readonly property var barIdentity: hostWidget || root
+
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
@@ -24,40 +28,32 @@ Panel {
   property bool isLoading: false
   property string errorMessage: ""
 
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
-
-  function refresh() {
-    serverUrl = Api.getSetting("serverUrl", "https://codetasker.noirlang.tr")
-    appToken = Api.getSetting("appToken", "")
-
+  function open() {
+    loadSettings()
     if (!appToken) {
-      root.unreadCount = 0
-      return
+      isSetupMode = true
+      Qt.callLater(function() { if (tokenInput) tokenInput.forceActiveFocus() })
+    } else {
+      loadNotifications()
+      Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
     }
-
-    Api.fetchUnreadCount(serverUrl, appToken, function(err, count) {
-      if (!err) {
-        root.unreadCount = count
-      }
-    })
+    if (root.controller) root.controller.show()
   }
 
-  function loadNotifications() {
-    if (!appToken) return
-    isLoading = true
-    errorMessage = ""
+  function close() {
+    if (root.controller) root.controller.hide()
+  }
 
-    Api.fetchNotifications(serverUrl, appToken, function(err, items) {
-      isLoading = false
-      if (err) {
-        errorMessage = err.message || "Failed to load notifications"
-        notificationsList = []
-      } else {
-        notificationsList = items
-        refresh()
-      }
-    })
+  function toggle() {
+    if (root.opened) root.close()
+    else root.open()
+  }
+
+  function refresh() {
+    if (hostWidget && typeof hostWidget.refresh === "function") {
+      hostWidget.refresh()
+    }
+    loadNotifications()
   }
 
   function loadSettings() {
@@ -77,7 +73,7 @@ Panel {
     if (appToken) {
       isSetupMode = false
       errorMessage = ""
-      refresh()
+      if (hostWidget && typeof hostWidget.refresh === "function") hostWidget.refresh()
       loadNotifications()
     } else {
       errorMessage = "Please enter a valid App Token."
@@ -100,61 +96,10 @@ Panel {
     })
   }
 
-  Component.onCompleted: refresh()
-
-  Timer {
-    interval: 10000 // Refresh unread count every 10 seconds
-    repeat: true
-    running: true
-    onTriggered: refresh()
-  }
-
-  onOpenedChanged: {
-    if (opened) {
-      loadSettings()
-      if (!appToken) {
-        isSetupMode = true
-        Qt.callLater(function() { if (tokenInput) tokenInput.forceActiveFocus() })
-      } else {
-        loadNotifications()
-        Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
-      }
-    }
-  }
-
-  IpcHandler {
-    target: root.ipcTarget
-    function open(): void { root.open() }
-    function close(): void { root.close() }
-    function show(): void { root.open() }
-    function hide(): void { root.close() }
-    function toggle(): void { root.toggle() }
-    function refresh(): string { root.refresh(); return "ok" }
-  }
-
-  // Native Omarchy BarIconButton matching system bar widgets
-  BarIconButton {
-    id: button
-    anchors.fill: parent
-    bar: root.bar
-    text: "" // FontAwesome / Nerd Font code icon (< />)
-    active: root.unreadCount > 0
-    activeColor: "#ef4444"
-    tooltipText: root.unreadCount > 0 ? ("CodeTasker (" + root.unreadCount + " unread)") : "CodeTasker Notifications"
-
-    onPressed: function(buttonCode) {
-      if (buttonCode === Qt.RightButton || buttonCode === Qt.MiddleButton) {
-        root.refresh()
-      } else {
-        root.toggle()
-      }
-    }
-  }
-
   KeyboardPanel {
     id: panel
-    anchorItem: button
-    owner: root
+    anchorItem: root.anchorItem
+    owner: root.barIdentity
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher

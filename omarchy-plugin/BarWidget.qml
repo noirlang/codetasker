@@ -44,10 +44,12 @@ BarWidget {
     var target = panelLoader.item
     if (!target) return
     if ("bar" in target) target.bar = root.bar
+    if ("settings" in target) target.settings = root.settings
     if ("anchorItem" in target) target.anchorItem = button
     if ("hostWidget" in target) target.hostWidget = root
   }
 
+  // Forward panel lifecycle properties and methods for shell summon / hide / toggle routing
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
 
   function open() {
@@ -62,8 +64,14 @@ BarWidget {
     if (panelLoader.item && panelLoader.item.toggle) panelLoader.item.toggle()
   }
 
-  readonly property real openPanelIndicatorWidth: button.labelWidth
-  readonly property real openPanelIndicatorHeight: Math.max(Style.space(10), Math.round(Style.bar.iconSlot * 0.55))
+  readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
+
+  function closeForPopoutSwitch() {
+    if (panelLoader.item && panelLoader.item.closeForPopoutSwitch) panelLoader.item.closeForPopoutSwitch()
+  }
+
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
 
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
@@ -79,24 +87,19 @@ BarWidget {
     }
   }
 
-  WidgetButton {
+  BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "</>" + (root.unreadCount > 0 ? (" (" + root.unreadCount + ")") : "")
-    labelVisible: !root.vertical
-    hasVisualContent: true
-    horizontalMargin: 8.75
-    verticalPadding: 8.75
-
-    // Color rule: Red (#ef4444) if unreadCount > 0, White (#ffffff) if unreadCount == 0
-    foreground: root.unreadCount > 0 ? "#ef4444" : "#ffffff"
+    text: "" // FontAwesome / Nerd Font code icon (< />)
+    active: root.unreadCount > 0
+    activeColor: "#ef4444"
+    tooltipText: root.unreadCount > 0 ? ("CodeTasker (" + root.unreadCount + " unread)") : "CodeTasker Notifications"
 
     onPressed: function(b) {
-      if (b === Qt.LeftButton) {
-        root.refresh()
-        root.togglePanel()
-      }
+      if (!root.bar) return
+      if (b === Qt.RightButton || b === Qt.MiddleButton) root.refresh()
+      else root.togglePanel()
     }
   }
 }
