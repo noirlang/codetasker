@@ -494,6 +494,94 @@ function SettingsContent({
         )}
       </DashboardInfoCard>
 
+      <DashboardInfoCard icon={Key} title="App Tokens (Notification API Keys)">
+        <div className="flex flex-col gap-4">
+          <p className="text-xs text-[#a0a0a0] leading-relaxed">
+            Generate API keys for external scripts or widgets. App Tokens are <b>strictly restricted to reading notifications</b> (<code>notifications:read</code> scope) and cannot access repos, tasks, or settings.
+          </p>
+
+          <form onSubmit={handleCreateToken} className="flex gap-2">
+            <input
+              type="text"
+              value={newTokenName}
+              onChange={(e) => setNewTokenName(e.target.value)}
+              placeholder="Token Name (e.g. Desktop Reader)"
+              className="input flex-1 text-xs"
+              required
+            />
+            <button
+              type="submit"
+              disabled={creatingToken || !newTokenName.trim()}
+              className="btn-primary text-xs py-2 px-3 shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              {creatingToken ? <Spinner size={12} /> : <Plus size={12} />}
+              <span>Generate Token</span>
+            </button>
+          </form>
+
+          {/* Raw Token Notice Display */}
+          {rawTokenNotice && (
+            <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-400">New App Token Generated</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(rawTokenNotice);
+                    setCopiedToken(true);
+                    setTimeout(() => setCopiedToken(false), 2000);
+                  }}
+                  className="btn-secondary py-0.5 px-2 text-[10px] font-mono flex items-center gap-1 text-emerald-300 border-emerald-500/30 cursor-pointer"
+                >
+                  <Copy size={10} />
+                  <span>{copiedToken ? 'Copied!' : 'Copy Token'}</span>
+                </button>
+              </div>
+              <div className="font-mono text-xs text-white bg-[#0d0d0d] p-2 rounded border border-[#2a2a2a] break-all select-all">
+                {rawTokenNotice}
+              </div>
+              <p className="text-[10px] text-emerald-300/80 leading-relaxed">
+                Save this token now! It will not be shown again. Pass header <code>X-App-Token: {rawTokenNotice.slice(0, 16)}...</code> or <code>Authorization: Bearer {rawTokenNotice.slice(0, 16)}...</code>
+              </p>
+            </div>
+          )}
+
+          {/* Existing Tokens list */}
+          <div className="flex flex-col gap-2 border-t border-[#222222] pt-3">
+            <h4 className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Active Tokens ({appTokens.length})</h4>
+            {loadingTokens ? (
+              <div className="flex justify-center py-4"><Spinner size={16} /></div>
+            ) : appTokens.length === 0 ? (
+              <p className="text-xs text-[#666666] italic py-1">No active app tokens created yet.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {appTokens.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between p-2.5 rounded bg-[#0d0d0d] border border-[#242424]">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-white truncate">{t.name}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-[9px]">
+                          {t.scope}
+                        </span>
+                      </div>
+                      <p className="text-[10px] font-mono text-[#666666] mt-0.5 truncate">
+                        Prefix: {t.token_prefix} · Created: {new Date(t.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteToken(t.id)}
+                      className="p-1.5 rounded text-[#666666] hover:text-red-400 hover:bg-[#1a1a1a] transition-colors ml-2 cursor-pointer"
+                      title="Revoke App Token"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </DashboardInfoCard>
+
       <DashboardInfoCard icon={Mail} title="Email notifications">
         <form onSubmit={handleSaveEmail} className="flex flex-col gap-3">
           <p className="text-xs text-[#a0a0a0] leading-relaxed">
@@ -587,94 +675,6 @@ function SettingsContent({
             </p>
           )}
         </form>
-      </DashboardInfoCard>
-
-      <DashboardInfoCard icon={Key} title="App Tokens (Notification API Keys)">
-        <div className="flex flex-col gap-4">
-          <p className="text-xs text-[#a0a0a0] leading-relaxed">
-            Generate API keys for external scripts or widgets. App Tokens are <b>strictly restricted to reading notifications</b> (<code>notifications:read</code> scope) and cannot access repos, tasks, or settings.
-          </p>
-
-          <form onSubmit={handleCreateToken} className="flex gap-2">
-            <input
-              type="text"
-              value={newTokenName}
-              onChange={(e) => setNewTokenName(e.target.value)}
-              placeholder="Token Name (e.g. Desktop Reader)"
-              className="input flex-1 text-xs"
-              required
-            />
-            <button
-              type="submit"
-              disabled={creatingToken || !newTokenName.trim()}
-              className="btn-primary text-xs py-2 px-3 shrink-0 flex items-center gap-1 cursor-pointer"
-            >
-              {creatingToken ? <Spinner size={12} /> : <Plus size={12} />}
-              <span>Generate Token</span>
-            </button>
-          </form>
-
-          {/* Raw Token Notice Display */}
-          {rawTokenNotice && (
-            <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-emerald-400">New App Token Generated</span>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(rawTokenNotice);
-                    setCopiedToken(true);
-                    setTimeout(() => setCopiedToken(false), 2000);
-                  }}
-                  className="btn-secondary py-0.5 px-2 text-[10px] font-mono flex items-center gap-1 text-emerald-300 border-emerald-500/30 cursor-pointer"
-                >
-                  <Copy size={10} />
-                  <span>{copiedToken ? 'Copied!' : 'Copy Token'}</span>
-                </button>
-              </div>
-              <div className="font-mono text-xs text-white bg-[#0d0d0d] p-2 rounded border border-[#2a2a2a] break-all select-all">
-                {rawTokenNotice}
-              </div>
-              <p className="text-[10px] text-emerald-300/80 leading-relaxed">
-                Save this token now! It will not be shown again. Pass header <code>X-App-Token: {rawTokenNotice.slice(0, 16)}...</code> or <code>Authorization: Bearer {rawTokenNotice.slice(0, 16)}...</code>
-              </p>
-            </div>
-          )}
-
-          {/* Existing Tokens list */}
-          <div className="flex flex-col gap-2 border-t border-[#222222] pt-3">
-            <h4 className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Active Tokens ({appTokens.length})</h4>
-            {loadingTokens ? (
-              <div className="flex justify-center py-4"><Spinner size={16} /></div>
-            ) : appTokens.length === 0 ? (
-              <p className="text-xs text-[#666666] italic py-1">No active app tokens created yet.</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {appTokens.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between p-2.5 rounded bg-[#0d0d0d] border border-[#242424]">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-white truncate">{t.name}</span>
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-[9px]">
-                          {t.scope}
-                        </span>
-                      </div>
-                      <p className="text-[10px] font-mono text-[#666666] mt-0.5 truncate">
-                        Prefix: {t.token_prefix} · Created: {new Date(t.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteToken(t.id)}
-                      className="p-1.5 rounded text-[#666666] hover:text-red-400 hover:bg-[#1a1a1a] transition-colors ml-2 cursor-pointer"
-                      title="Revoke App Token"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
       </DashboardInfoCard>
 
       <DashboardInfoCard icon={GitFork} title="Connected sources">
