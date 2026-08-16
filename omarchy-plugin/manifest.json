@@ -8,7 +8,7 @@
   "description": "CodeTasker notifications widget — shows unread count and lets you browse notifications directly from the Omarchy bar.",
   "kinds": ["bar-widget"],
   "entryPoints": {
-    "barWidget": "Panel.qml"
+    "barWidget": "BarWidget.qml"
   },
   "barWidget": {
     "displayName": "CodeTasker Notifications",

@@ -10,70 +10,40 @@ BarWidget {
   moduleName: "codetasker.notifications"
 
   property int unreadCount: 0
-  property string serverUrl: "https://codetasker.noirlang.tr"
-  property string appToken: ""
 
-  function refresh() {
-    serverUrl = Api.getSetting("serverUrl", "https://codetasker.noirlang.tr")
-    appToken = Api.getSetting("appToken", "")
-
-    if (!appToken) {
-      root.unreadCount = 0
-      if (panelLoader.item && panelLoader.item.refresh) panelLoader.item.refresh()
-      return
-    }
-
-    Api.fetchUnreadCount(serverUrl, appToken, function(err, count) {
-      if (!err) {
-        root.unreadCount = count
-      }
-      if (panelLoader.item && panelLoader.item.refresh) panelLoader.item.refresh()
+  function doRefresh() {
+    var sv = Api.getSetting("serverUrl", "https://codetasker.noirlang.tr")
+    var tk = Api.getSetting("appToken", "")
+    if (!tk) { unreadCount = 0; return }
+    Api.fetchUnreadCount(sv, tk, function(err, count) {
+      if (!err) unreadCount = count
     })
   }
 
-  Component.onCompleted: root.refresh()
+  Component.onCompleted: doRefresh()
+  Timer { interval: 10000; repeat: true; running: true; onTriggered: root.doRefresh() }
 
-  Timer {
-    interval: 10000 // Refresh unread count every 10 seconds
-    repeat: true
-    running: true
-    onTriggered: root.refresh()
-  }
+  // ── Panel lifecycle forwarding ──────────────────────────────────────────
+  readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
+  function open()   { if (panelLoader.item) panelLoader.item.open() }
+  function close()  { if (panelLoader.item) panelLoader.item.close() }
+  function togglePanel() { if (panelLoader.item) panelLoader.item.toggle() }
+  readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
+  function closeForPopoutSwitch() { if (panelLoader.item) panelLoader.item.closeForPopoutSwitch() }
 
   function injectPanel() {
-    var target = panelLoader.item
-    if (!target) return
-    if ("bar" in target) target.bar = root.bar
-    if ("settings" in target) target.settings = root.settings
-    if ("anchorItem" in target) target.anchorItem = button
-    if ("hostWidget" in target) target.hostWidget = root
+    var t = panelLoader.item
+    if (!t) return
+    if ("bar"        in t) t.bar        = root.bar
+    if ("settings"   in t) t.settings   = root.settings
+    if ("anchorItem" in t) t.anchorItem = button
+    if ("hostWidget" in t) t.hostWidget = root
   }
 
-  // Forward panel lifecycle properties and methods for shell summon / hide / toggle routing
-  readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
-
-  function open() {
-    if (panelLoader.item && panelLoader.item.open) panelLoader.item.open()
-  }
-
-  function close() {
-    if (panelLoader.item && panelLoader.item.close) panelLoader.item.close()
-  }
-
-  function togglePanel() {
-    if (panelLoader.item && panelLoader.item.toggle) panelLoader.item.toggle()
-  }
-
-  readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
-
-  function closeForPopoutSwitch() {
-    if (panelLoader.item && panelLoader.item.closeForPopoutSwitch) panelLoader.item.closeForPopoutSwitch()
-  }
-
-  implicitWidth: button.implicitWidth
+  implicitWidth:  button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  onBarChanged: injectPanel()
+  onBarChanged:      injectPanel()
   onSettingsChanged: injectPanel()
 
   Loader {
@@ -81,27 +51,30 @@ BarWidget {
     active: true
     source: Qt.resolvedUrl("Panel.qml")
     visible: false
-    onLoaded: {
-      root.injectPanel()
-      Qt.callLater(root.injectPanel)
-    }
+    onLoaded: { root.injectPanel(); Qt.callLater(root.injectPanel) }
   }
 
-  BarIconButton {
+  IpcHandler {
+    target: root.moduleName
+    function open(): void   { root.open() }
+    function close(): void  { root.close() }
+    function show(): void   { root.open() }
+    function hide(): void   { root.close() }
+    function toggle(): void { root.togglePanel() }
+    function refresh(): void { root.doRefresh() }
+  }
+
+  WidgetButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "󰅩" // Nerd Font md-code_tags (< />) icon matching system bar icons
+    text: "\uf121"
     active: root.unreadCount > 0
-    activeColor: "#ef4444"
-    tooltipText: root.unreadCount > 0 ? ("CodeTasker (" + root.unreadCount + " unread)") : "CodeTasker Notifications"
+    useActiveColor: true
 
     onPressed: function(b) {
-      if (b === Qt.RightButton || b === Qt.MiddleButton) {
-        root.refresh()
-      } else {
-        root.togglePanel()
-      }
+      if (b === Qt.RightButton || b === Qt.MiddleButton) root.doRefresh()
+      else root.togglePanel()
     }
   }
 }
