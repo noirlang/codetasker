@@ -130,7 +130,7 @@ Panel {
             spacing: Style.space(8)
 
             Text {
-              text: ""
+              text: "󰅩"
               font.bold: true
               font.pixelSize: Style.font.heading
               font.family: root.fontFamily

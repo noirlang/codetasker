@@ -91,15 +91,17 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "" // FontAwesome / Nerd Font code icon (< />)
+    text: "󰅩" // Nerd Font md-code_tags (< />) icon matching system bar icons
     active: root.unreadCount > 0
     activeColor: "#ef4444"
     tooltipText: root.unreadCount > 0 ? ("CodeTasker (" + root.unreadCount + " unread)") : "CodeTasker Notifications"
 
     onPressed: function(b) {
-      if (!root.bar) return
-      if (b === Qt.RightButton || b === Qt.MiddleButton) root.refresh()
-      else root.togglePanel()
+      if (b === Qt.RightButton || b === Qt.MiddleButton) {
+        root.refresh()
+      } else {
+        root.togglePanel()
+      }
     }
   }
 }
