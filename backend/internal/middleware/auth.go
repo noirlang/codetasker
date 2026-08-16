@@ -104,13 +104,14 @@ func Protected(cfg *config.Config, appTokenRepo *repository.AppTokenRepository, 
 				})
 			}
 
-			// Scope Check: App Token is strictly restricted to reading notifications ONLY!
+			// Scope Check: App Token is strictly restricted to reading & managing notifications ONLY!
 			reqPath := c.Path()
 			isNotificationPath := strings.HasPrefix(reqPath, "/api/notifications")
-			if !isNotificationPath || c.Method() != "GET" {
+			isAllowedMethod := c.Method() == "GET" || c.Method() == "PATCH"
+			if !isNotificationPath || !isAllowedMethod {
 				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 					"error":   "invalid_scope",
-					"message": "this app token is restricted to notifications:read scope only (GET /api/notifications)",
+					"message": "this app token is restricted to notifications:read scope only (/api/notifications)",
 				})
 			}
 
