@@ -1,15 +1,9 @@
 // CodeTaskerApi.js — Omarchy Plugin API & Storage Helper
 
-var STORAGE_FILE = ".codetasker_omarchy_config.json";
-
-function getStoragePath() {
-    return (typeof localStorage !== "undefined") ? "local" : "config";
-}
-
 function getSetting(key, defaultValue) {
     if (typeof localStorage !== "undefined" && localStorage.getItem) {
         var val = localStorage.getItem("codetasker_" + key);
-        return val !== null ? val : defaultValue;
+        return (val !== null && val !== "") ? val : defaultValue;
     }
     return defaultValue;
 }
@@ -21,12 +15,15 @@ function setSetting(key, value) {
 }
 
 function fetchNotifications(serverUrl, appToken, callback) {
-    if (!serverUrl || !appToken) {
-        callback(new Error("Missing Server URL or App Token"), null);
+    var defaultUrl = "https://codetasker.noirlang.tr";
+    var targetUrl = (serverUrl && serverUrl.trim() !== "") ? serverUrl.trim() : defaultUrl;
+
+    if (!appToken) {
+        callback(new Error("Missing App Token"), null);
         return;
     }
 
-    var baseUrl = serverUrl.replace(/\/+$/, "");
+    var baseUrl = targetUrl.replace(/\/+$/, "");
     var url = baseUrl + "/api/notifications";
 
     var xhr = new XMLHttpRequest();
@@ -54,12 +51,15 @@ function fetchNotifications(serverUrl, appToken, callback) {
 }
 
 function fetchUnreadCount(serverUrl, appToken, callback) {
-    if (!serverUrl || !appToken) {
+    var defaultUrl = "https://codetasker.noirlang.tr";
+    var targetUrl = (serverUrl && serverUrl.trim() !== "") ? serverUrl.trim() : defaultUrl;
+
+    if (!appToken) {
         callback(null, 0);
         return;
     }
 
-    var baseUrl = serverUrl.replace(/\/+$/, "");
+    var baseUrl = targetUrl.replace(/\/+$/, "");
     var url = baseUrl + "/api/notifications/unread-count";
 
     var xhr = new XMLHttpRequest();
@@ -85,9 +85,12 @@ function fetchUnreadCount(serverUrl, appToken, callback) {
 }
 
 function markAllRead(serverUrl, appToken, callback) {
-    if (!serverUrl || !appToken) return;
+    var defaultUrl = "https://codetasker.noirlang.tr";
+    var targetUrl = (serverUrl && serverUrl.trim() !== "") ? serverUrl.trim() : defaultUrl;
 
-    var baseUrl = serverUrl.replace(/\/+$/, "");
+    if (!appToken) return;
+
+    var baseUrl = targetUrl.replace(/\/+$/, "");
     var url = baseUrl + "/api/notifications/read-all";
 
     var xhr = new XMLHttpRequest();
@@ -108,9 +111,12 @@ function markAllRead(serverUrl, appToken, callback) {
 }
 
 function markRead(serverUrl, appToken, id, callback) {
-    if (!serverUrl || !appToken || !id) return;
+    var defaultUrl = "https://codetasker.noirlang.tr";
+    var targetUrl = (serverUrl && serverUrl.trim() !== "") ? serverUrl.trim() : defaultUrl;
 
-    var baseUrl = serverUrl.replace(/\/+$/, "");
+    if (!appToken || !id) return;
+
+    var baseUrl = targetUrl.replace(/\/+$/, "");
     var url = baseUrl + "/api/notifications/" + id + "/read";
 
     var xhr = new XMLHttpRequest();

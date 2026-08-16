@@ -1,91 +1,96 @@
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.Commons
+import qs.Ui
 import "CodeTaskerApi.js" as Api
 
-Rectangle {
-    id: root
-    implicitWidth: contentRow.implicitWidth + 14
-    implicitHeight: 28
-    radius: 4
-    color: mouseArea.containsMouse ? "#1a1a1a" : "transparent"
+BarWidget {
+  id: root
+  moduleName: "codetasker.notifications"
 
-    property int unreadCount: 0
-    property string serverUrl: "http://localhost:8080"
-    property string appToken: ""
+  property int unreadCount: 0
+  property string serverUrl: "https://codetasker.noirlang.tr"
+  property string appToken: ""
 
-    Component.onCompleted: {
-        refreshSettingsAndUnread()
-        pollTimer.start()
+  function refresh() {
+    serverUrl = Api.getSetting("serverUrl", "https://codetasker.noirlang.tr")
+    appToken = Api.getSetting("appToken", "")
+
+    if (!appToken) {
+      root.unreadCount = 0
+      return
     }
 
-    function refreshSettingsAndUnread() {
-        serverUrl = Api.getSetting("serverUrl", "http://localhost:8080")
-        appToken = Api.getSetting("appToken", "")
+    Api.fetchUnreadCount(serverUrl, appToken, function(err, count) {
+      if (!err) {
+        root.unreadCount = count
+      }
+    })
+  }
 
-        if (!appToken) {
-            unreadCount = 0
-            return
-        }
+  Component.onCompleted: root.refresh()
 
-        Api.fetchUnreadCount(serverUrl, appToken, function(err, count) {
-            if (!err) {
-                unreadCount = count
-            }
-        })
+  Timer {
+    interval: 10000 // Refresh every 10 seconds
+    repeat: true
+    running: true
+    onTriggered: root.refresh()
+  }
+
+  function injectPanel() {
+    var target = panelLoader.item
+    if (!target) return
+    if ("bar" in target) target.bar = root.bar
+    if ("anchorItem" in target) target.anchorItem = button
+    if ("hostWidget" in target) target.hostWidget = root
+  }
+
+  readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
+
+  function open() {
+    if (panelLoader.item && panelLoader.item.open) panelLoader.item.open()
+  }
+
+  function close() {
+    if (panelLoader.item && panelLoader.item.close) panelLoader.item.close()
+  }
+
+  function togglePanel() {
+    if (panelLoader.item && panelLoader.item.toggle) panelLoader.item.toggle()
+  }
+
+  onBarChanged: injectPanel()
+
+  Loader {
+    id: panelLoader
+    active: true
+    source: Qt.resolvedUrl("Panel.qml")
+    visible: false
+    onLoaded: {
+      root.injectPanel()
+      Qt.callLater(root.injectPanel)
     }
+  }
 
-    Timer {
-        id: pollTimer
-        interval: 10000 // Refresh every 10 seconds
-        repeat: true
-        running: true
-        onTriggered: refreshSettingsAndUnread()
+  WidgetButton {
+    id: button
+    anchors.fill: parent
+    bar: root.bar
+    text: "</>" + (root.unreadCount > 0 ? (" (" + root.unreadCount + ")") : "")
+    labelVisible: !root.vertical
+    hasVisualContent: true
+    horizontalMargin: 8.75
+    verticalPadding: 8.75
+
+    // Icon color: Red (#ef4444) if unreadCount > 0, White (#ffffff) if unreadCount == 0
+    foreground: root.unreadCount > 0 ? "#ef4444" : "#ffffff"
+
+    onPressed: function(b) {
+      if (b === Qt.LeftButton) {
+        root.refresh()
+        root.togglePanel()
+      }
     }
-
-    RowLayout {
-        id: contentRow
-        anchors.centerIn: parent
-        spacing: 5
-
-        Text {
-            text: "</>"
-            font.bold: true
-            font.pixelSize: 13
-            font.family: "Monospace"
-            color: unreadCount > 0 ? "#ef4444" : (appToken ? "#ffffff" : "#666666")
-        }
-
-        Rectangle {
-            visible: unreadCount > 0
-            implicitWidth: Math.max(14, countText.implicitWidth + 6)
-            implicitHeight: 14
-            radius: 7
-            color: "#ef4444"
-
-            Text {
-                id: countText
-                anchors.centerIn: parent
-                text: unreadCount > 99 ? "99+" : unreadCount.toString()
-                color: "#ffffff"
-                font.pixelSize: 9
-                font.bold: true
-            }
-        }
-    }
-
-    MouseArea {
-        id: mouseArea
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            refreshSettingsAndUnread()
-            if (typeof shell !== "undefined" && shell.togglePanel) {
-                shell.togglePanel("codetasker.notifications")
-            } else if (parent && parent.togglePanel) {
-                parent.togglePanel()
-            }
-        }
-    }
+  }
 }
