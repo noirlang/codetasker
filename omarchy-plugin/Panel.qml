@@ -1,6 +1,6 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -13,10 +13,10 @@ Panel {
   ipcTarget: "codetasker.notifications"
   manageIpc: false
 
-  property var anchorItem: null
-  property var hostWidget: null
-  readonly property var barIdentity: hostWidget || root
+  readonly property color foreground: bar ? bar.foreground : Color.foreground
+  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
+  property int unreadCount: 0
   property string serverUrl: "https://codetasker.noirlang.tr"
   property string appToken: ""
   property bool isSetupMode: false
@@ -24,25 +24,40 @@ Panel {
   property bool isLoading: false
   property string errorMessage: ""
 
-  property bool opened: false
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
 
-  function open() {
-    loadSettings()
+  function refresh() {
+    serverUrl = Api.getSetting("serverUrl", "https://codetasker.noirlang.tr")
+    appToken = Api.getSetting("appToken", "")
+
     if (!appToken) {
-      isSetupMode = true
-    } else {
-      loadNotifications()
+      root.unreadCount = 0
+      return
     }
-    opened = true
+
+    Api.fetchUnreadCount(serverUrl, appToken, function(err, count) {
+      if (!err) {
+        root.unreadCount = count
+      }
+    })
   }
 
-  function close() {
-    opened = false
-  }
+  function loadNotifications() {
+    if (!appToken) return
+    isLoading = true
+    errorMessage = ""
 
-  function toggle() {
-    if (opened) close()
-    else open()
+    Api.fetchNotifications(serverUrl, appToken, function(err, items) {
+      isLoading = false
+      if (err) {
+        errorMessage = err.message || "Failed to load notifications"
+        notificationsList = []
+      } else {
+        notificationsList = items
+        refresh()
+      }
+    })
   }
 
   function loadSettings() {
@@ -61,28 +76,11 @@ Panel {
 
     if (appToken) {
       isSetupMode = false
-      if (hostWidget && typeof hostWidget.refresh === "function") hostWidget.refresh()
+      refresh()
       loadNotifications()
     } else {
       errorMessage = "Please enter a valid App Token."
     }
-  }
-
-  function loadNotifications() {
-    if (!appToken) return
-    isLoading = true
-    errorMessage = ""
-
-    Api.fetchNotifications(serverUrl, appToken, function(err, items) {
-      isLoading = false
-      if (err) {
-        errorMessage = err.message || "Failed to load notifications"
-        notificationsList = []
-      } else {
-        notificationsList = items
-        if (hostWidget && typeof hostWidget.refresh === "function") hostWidget.refresh()
-      }
-    })
   }
 
   function handleMarkAllRead() {
@@ -101,10 +99,63 @@ Panel {
     })
   }
 
+  Component.onCompleted: refresh()
+
+  Timer {
+    interval: 10000 // Refresh unread count every 10 seconds
+    repeat: true
+    running: true
+    onTriggered: refresh()
+  }
+
+  onOpenedChanged: {
+    if (opened) {
+      loadSettings()
+      if (!appToken) {
+        isSetupMode = true
+      } else {
+        loadNotifications()
+      }
+      Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
+    }
+  }
+
+  IpcHandler {
+    target: root.ipcTarget
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.toggle() }
+    function refresh(): string { root.refresh(); return "ok" }
+  }
+
+  WidgetButton {
+    id: button
+    anchors.fill: parent
+    bar: root.bar
+    text: "</>" + (root.unreadCount > 0 ? (" (" + root.unreadCount + ")") : "")
+    labelVisible: !root.vertical
+    hasVisualContent: true
+    horizontalMargin: 8.75
+    verticalPadding: 8.75
+
+    // Color rule: Red (#ef4444) if unreadCount > 0, White (#ffffff) if unreadCount == 0
+    foreground: root.unreadCount > 0 ? "#ef4444" : "#ffffff"
+
+    onPressed: function(buttonCode) {
+      if (buttonCode === Qt.RightButton || buttonCode === Qt.MiddleButton) {
+        root.refresh()
+      } else {
+        root.toggle()
+      }
+    }
+  }
+
   KeyboardPanel {
     id: panel
-    anchorItem: root.anchorItem
-    owner: root.barIdentity
+    anchorItem: button
+    owner: root
     bar: root.bar
     open: root.opened
     centerOnBar: true
