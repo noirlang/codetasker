@@ -132,7 +132,7 @@ Panel {
     function refresh(): string { root.refresh(); return "ok" }
   }
 
-  // Native Omarchy Bar Icon Button matching system bar widgets
+  // Native Omarchy BarIconButton matching system bar widgets
   BarIconButton {
     id: button
     anchors.fill: parent
@@ -159,7 +159,7 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(contentCol.implicitHeight + Style.space(32), Style.space(520))
+    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight + Style.space(24), Style.space(520))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -169,36 +169,34 @@ Panel {
 
       Flickable {
         anchors.fill: parent
-        anchors.margins: Style.space(16)
         contentWidth: width
-        contentHeight: contentCol.implicitHeight
+        contentHeight: panelColumn.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        interactive: contentHeight > height
 
-        ColumnLayout {
-          id: contentCol
+        Column {
+          id: panelColumn
           width: parent.width
           spacing: Style.space(12)
 
           // ── Header ────────────────────────────────────────────────────────
           RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
+            width: parent.width
+            spacing: Style.space(8)
 
             Text {
               text: ""
               font.bold: true
-              font.pixelSize: 15
+              font.pixelSize: Style.font.heading
               font.family: root.fontFamily
               color: "#10b981"
             }
 
             Text {
-              text: "CodeTasker Notifications"
+              text: "CodeTasker"
               font.bold: true
-              font.pixelSize: 13
-              color: "#ffffff"
+              font.pixelSize: Style.font.heading
+              color: root.foreground
               font.family: root.fontFamily
               Layout.fillWidth: true
             }
@@ -227,12 +225,12 @@ Panel {
               implicitWidth: 26
               implicitHeight: 26
               radius: 4
-              color: refreshMouse.containsMouse ? "#222222" : "#141414"
+              color: refreshMouse.containsMouse ? Color.surface : "transparent"
 
               Text {
                 anchors.centerIn: parent
                 text: "↻"
-                color: "#a0a0a0"
+                color: root.foreground
                 font.pixelSize: 12
               }
 
@@ -250,12 +248,12 @@ Panel {
               implicitWidth: 26
               implicitHeight: 26
               radius: 4
-              color: settingsMouse.containsMouse ? "#222222" : "#141414"
+              color: settingsMouse.containsMouse ? Color.surface : "transparent"
 
               Text {
                 anchors.centerIn: parent
                 text: "⚙"
-                color: isSetupMode ? "#10b981" : "#a0a0a0"
+                color: isSetupMode ? "#10b981" : root.foreground
                 font.pixelSize: 12
               }
 
@@ -270,59 +268,59 @@ Panel {
           }
 
           Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 1
-            color: "#222222"
+            width: parent.width
+            height: 1
+            color: Color.surface
           }
 
           // ── 1. SETUP MODE (Token Input Prompt on 1st run) ─────────────────
-          ColumnLayout {
+          Column {
             visible: isSetupMode
-            Layout.fillWidth: true
-            spacing: 12
+            width: parent.width
+            spacing: Style.space(12)
 
             Text {
               text: "Connect to CodeTasker"
               font.bold: true
-              font.pixelSize: 14
-              color: "#ffffff"
+              font.pixelSize: Style.font.body
+              color: root.foreground
               font.family: root.fontFamily
             }
 
             Text {
               text: "Generate an App Token in CodeTasker (Settings → App Tokens) to receive notifications in Omarchy."
               wrapMode: Text.WordWrap
-              Layout.fillWidth: true
-              font.pixelSize: 11
-              color: "#888888"
+              width: parent.width
+              font.pixelSize: Style.font.caption
+              color: Qt.darker(root.foreground, 1.3)
               font.family: root.fontFamily
             }
 
-            ColumnLayout {
-              Layout.fillWidth: true
-              spacing: 4
+            Column {
+              width: parent.width
+              spacing: Style.space(4)
 
               Text {
                 text: "SERVER URL"
                 font.pixelSize: 9
                 font.bold: true
                 font.family: "Monospace"
-                color: "#666666"
+                color: Qt.darker(root.foreground, 1.5)
               }
 
               Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 32
+                width: parent.width
+                height: 32
                 radius: 4
-                color: "#121212"
-                border.color: serverInput.activeFocus ? "#10b981" : "#2a2a2a"
+                color: Color.surface
+                border.color: serverInput.activeFocus ? "#10b981" : "transparent"
 
                 TextInput {
                   id: serverInput
                   anchors.fill: parent
                   anchors.margins: 6
                   text: "https://codetasker.noirlang.tr"
-                  color: "#ffffff"
+                  color: root.foreground
                   font.pixelSize: 11
                   verticalAlignment: TextInput.AlignVCenter
                   selectByMouse: true
@@ -331,31 +329,31 @@ Panel {
               }
             }
 
-            ColumnLayout {
-              Layout.fillWidth: true
-              spacing: 4
+            Column {
+              width: parent.width
+              spacing: Style.space(4)
 
               Text {
                 text: "APP TOKEN (ct_app_...)"
                 font.pixelSize: 9
                 font.bold: true
                 font.family: "Monospace"
-                color: "#666666"
+                color: Qt.darker(root.foreground, 1.5)
               }
 
               Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 32
+                width: parent.width
+                height: 32
                 radius: 4
-                color: "#121212"
-                border.color: tokenInput.activeFocus ? "#10b981" : "#2a2a2a"
+                color: Color.surface
+                border.color: tokenInput.activeFocus ? "#10b981" : "transparent"
 
                 TextInput {
                   id: tokenInput
                   anchors.fill: parent
                   anchors.margins: 6
                   text: ""
-                  color: "#ffffff"
+                  color: root.foreground
                   font.pixelSize: 11
                   verticalAlignment: TextInput.AlignVCenter
                   selectByMouse: true
@@ -370,12 +368,12 @@ Panel {
               color: "#ef4444"
               font.pixelSize: 11
               wrapMode: Text.WordWrap
-              Layout.fillWidth: true
+              width: parent.width
             }
 
             Rectangle {
-              Layout.fillWidth: true
-              implicitHeight: 34
+              width: parent.width
+              height: 34
               radius: 4
               color: saveMouse.containsMouse ? "#059669" : "#10b981"
 
@@ -398,17 +396,17 @@ Panel {
           }
 
           // ── 2. NOTIFICATIONS LIST MODE ──────────────────────────────────
-          ColumnLayout {
+          Column {
             visible: !isSetupMode
-            Layout.fillWidth: true
-            spacing: 8
+            width: parent.width
+            spacing: Style.space(8)
 
             Text {
               visible: isLoading
               text: "Loading notifications..."
-              color: "#888888"
+              color: Qt.darker(root.foreground, 1.3)
               font.pixelSize: 11
-              Layout.alignment: Qt.AlignHCenter
+              anchors.horizontalCenter: parent.horizontalCenter
             }
 
             Text {
@@ -417,26 +415,25 @@ Panel {
               color: "#ef4444"
               font.pixelSize: 11
               wrapMode: Text.WordWrap
-              Layout.fillWidth: true
+              width: parent.width
             }
 
             Text {
               visible: !isLoading && errorMessage === "" && notificationsList.length === 0
               text: "No notifications right now."
-              color: "#666666"
+              color: Qt.darker(root.foreground, 1.5)
               font.pixelSize: 11
               font.italic: true
-              Layout.alignment: Qt.AlignHCenter
+              anchors.horizontalCenter: parent.horizontalCenter
             }
 
             Repeater {
               model: notificationsList
               delegate: Rectangle {
-                Layout.fillWidth: true
+                width: panelColumn.width
                 implicitHeight: itemCol.implicitHeight + 16
                 radius: 6
-                color: "#141414"
-                border.color: "#222222"
+                color: Color.surface
 
                 ColumnLayout {
                   id: itemCol
@@ -453,7 +450,7 @@ Panel {
                       text: modelData.title || "Notification"
                       font.bold: true
                       font.pixelSize: 11
-                      color: "#ffffff"
+                      color: root.foreground
                       Layout.fillWidth: true
                       elide: Text.ElideRight
                     }
@@ -462,7 +459,7 @@ Panel {
                       implicitWidth: 18
                       implicitHeight: 18
                       radius: 4
-                      color: markMouse.containsMouse ? "#262626" : "transparent"
+                      color: markMouse.containsMouse ? Qt.darker(Color.surface, 1.2) : "transparent"
 
                       Text {
                         anchors.centerIn: parent
@@ -483,7 +480,7 @@ Panel {
 
                   Text {
                     text: modelData.message || ""
-                    color: "#a0a0a0"
+                    color: Qt.darker(root.foreground, 1.3)
                     font.pixelSize: 10
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
@@ -494,11 +491,11 @@ Panel {
 
             Rectangle {
               visible: !isLoading && notificationsList.length > 0
-              Layout.fillWidth: true
-              implicitHeight: 30
+              width: parent.width
+              height: 30
               radius: 4
-              color: markAllMouse.containsMouse ? "#222222" : "#141414"
-              border.color: "#262626"
+              color: markAllMouse.containsMouse ? Color.surface : "transparent"
+              border.color: Color.surface
 
               Text {
                 anchors.centerIn: parent
