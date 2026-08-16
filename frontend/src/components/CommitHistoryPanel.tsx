@@ -204,12 +204,12 @@ export default function CommitHistoryPanel({
               onClick={() => fetchCommits()}
               className="btn-secondary text-[10px] py-1 px-2"
             >
-              Yeniden Dene
+              Retry
             </button>
           </div>
         ) : commits.length === 0 ? (
           <p className="py-8 text-center text-xs text-[#666666]">
-            Bu dalda commit bulunamadı.
+            No commits found on this branch.
           </p>
         ) : (
           <>

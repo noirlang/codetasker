@@ -582,17 +582,17 @@ function TaskDetailModal({
                         {/* Status Badge */}
                         {proposal.status === 'approved' && (
                           <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono flex items-center gap-1 shrink-0">
-                            <Check size={10} /> Onaylandı
+                            <Check size={10} /> Approved
                           </span>
                         )}
                         {proposal.status === 'rejected' && (
                           <span className="px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-mono flex items-center gap-1 shrink-0">
-                            <XCircle size={10} /> Reddedildi
+                            <XCircle size={10} /> Rejected
                           </span>
                         )}
                         {proposal.status === 'pending' && (
                           <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono flex items-center gap-1 shrink-0">
-                            <Lightbulb size={10} /> Beklemede
+                            <Lightbulb size={10} /> Pending
                           </span>
                         )}
                       </div>
@@ -615,7 +615,7 @@ function TaskDetailModal({
                                 : 'border-[#2a2a2a] text-emerald-400 hover:bg-emerald-500/10'
                             }`}
                           >
-                            <Check size={10} /> Onayla
+                            <Check size={10} /> Approve
                           </button>
                           <button
                             onClick={() => handleVoteProposal(proposal.id, 'rejected')}
@@ -625,7 +625,7 @@ function TaskDetailModal({
                                 : 'border-[#2a2a2a] text-red-400 hover:bg-red-500/10'
                             }`}
                           >
-                            <XCircle size={10} /> Reddet
+                            <XCircle size={10} /> Reject
                           </button>
                         </div>
 
@@ -647,19 +647,19 @@ function TaskDetailModal({
               {/* Add Proposal Form */}
               <div className="mt-2 rounded border border-[#222222] bg-[#161616] p-3 flex flex-col gap-2">
                 <h4 className="text-xs font-semibold text-white flex items-center gap-1">
-                  <Lightbulb size={12} className="text-amber-400" /> Yeni Öneri / Tartışma Başlat
+                  <Lightbulb size={12} className="text-amber-400" /> Start New Proposal / Discussion
                 </h4>
                 <input
                   type="text"
                   value={newPropTitle}
                   onChange={(e) => setNewPropTitle(e.target.value)}
-                  placeholder="Öneri Başlığı (örn. Auth servisi refactor edilsin)"
+                  placeholder="Proposal Title (e.g., Refactor Auth Service)"
                   className="w-full rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-1.5 text-xs text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a]"
                 />
                 <textarea
                   value={newPropContent}
                   onChange={(e) => setNewPropContent(e.target.value)}
-                  placeholder="Öneri detayları ve gerekçesi…"
+                  placeholder="Proposal details and rationale…"
                   rows={2}
                   className="w-full resize-none rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-1.5 text-[11px] text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a]"
                 />
@@ -669,7 +669,7 @@ function TaskDetailModal({
                     disabled={!newPropTitle.trim() || submittingProp}
                     className="btn-primary py-1 px-3 text-xs font-medium"
                   >
-                    {submittingProp ? <Spinner size={11} /> : 'Öneri Gönder'}
+                    {submittingProp ? <Spinner size={11} /> : 'Submit Proposal'}
                   </button>
                 </div>
               </div>
