@@ -8,24 +8,29 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/codetasker/backend/internal/domain"
 	"github.com/codetasker/backend/internal/middleware"
+	"github.com/codetasker/backend/internal/repository"
 	"github.com/codetasker/backend/internal/service"
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// AuthController handles all authentication-related HTTP endpoints.
-// It delegates OAuth token exchange and JWT generation to AuthService.
+// AuthController handles all authentication-related HTTP endpoints and App Tokens.
 type AuthController struct {
-	authService *service.AuthService
+	authService  *service.AuthService
+	appTokenRepo *repository.AppTokenRepository
 }
 
-// NewAuthController constructs an AuthController with its service dependency.
-func NewAuthController(authService *service.AuthService) *AuthController {
-	return &AuthController{authService: authService}
+// NewAuthController constructs an AuthController.
+func NewAuthController(authService *service.AuthService, appTokenRepo *repository.AppTokenRepository) *AuthController {
+	return &AuthController{
+		authService:  authService,
+		appTokenRepo: appTokenRepo,
+	}
 }
 
-// RegisterRoutes mounts all auth routes onto the provided Fiber router.
-// No JWT middleware is applied here — these routes must be publicly accessible.
+// RegisterRoutes mounts all public auth routes.
 func (ac *AuthController) RegisterRoutes(app *fiber.App) {
 	auth := app.Group("/api/auth")
 	auth.Get("/github", ac.InitiateOAuth)
@@ -33,10 +38,15 @@ func (ac *AuthController) RegisterRoutes(app *fiber.App) {
 	auth.Post("/logout", ac.Logout)
 }
 
-// RegisterProtectedRoutes mounts auth routes that require JWT verification.
+// RegisterProtectedRoutes mounts auth and app-token routes that require authentication.
 func (ac *AuthController) RegisterProtectedRoutes(group fiber.Router) {
 	group.Get("/auth/me", ac.GetMe)
 	group.Patch("/auth/me", ac.UpdateMe)
+
+	// App Tokens (API Keys)
+	group.Get("/user/app-tokens", ac.ListAppTokens)
+	group.Post("/user/app-tokens", ac.CreateAppToken)
+	group.Delete("/user/app-tokens/:tokenId", ac.DeleteAppToken)
 }
 
 // InitiateOAuth generates a cryptographically random state token, stores it
@@ -257,5 +267,112 @@ func (ac *AuthController) UpdateMe(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"user":    user,
 		"message": "profile updated successfully",
+	})
+}
+
+// ListAppTokens returns all active API App Tokens created by the user.
+//
+// Route: GET /api/user/app-tokens
+func (ac *AuthController) ListAppTokens(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	tokens, err := ac.appTokenRepo.FindByUserID(c.Context(), userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "list_tokens_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"app_tokens": tokens,
+	})
+}
+
+// CreateAppToken generates a new App Token for reading notifications.
+// The raw token is returned ONCE and never stored in plaintext.
+//
+// Route: POST /api/user/app-tokens
+func (ac *AuthController) CreateAppToken(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Name == "" {
+		req.Name = "Notification Token"
+	}
+
+	// Generate 32 cryptographically secure random bytes
+	randomBytes := make([]byte, 32)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "token_generation_failed",
+			"message": "failed to generate random bytes",
+		})
+	}
+
+	rawSecret := hex.EncodeToString(randomBytes)
+	rawToken := "ct_app_" + rawSecret
+	prefix := "ct_app_" + rawSecret[:8] + "..."
+
+	tokenHash := repository.HashToken(rawToken)
+
+	tokenDoc := domain.AppToken{
+		ID:          primitive.NewObjectID(),
+		UserID:      userID,
+		Name:        req.Name,
+		TokenPrefix: prefix,
+		TokenHash:   tokenHash,
+		Scope:       domain.ScopeNotificationsRead, // Strictly restricted to notifications:read!
+		CreatedAt:   time.Now(),
+	}
+
+	if err := ac.appTokenRepo.Create(c.Context(), &tokenDoc); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "create_token_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(domain.CreateAppTokenResponse{
+		AppToken: tokenDoc,
+		RawToken: rawToken,
+	})
+}
+
+// DeleteAppToken revokes an App Token.
+//
+// Route: DELETE /api/user/app-tokens/:tokenId
+func (ac *AuthController) DeleteAppToken(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	tokenIDStr := c.Params("tokenId")
+	tokenObjID, err := primitive.ObjectIDFromHex(tokenIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_id",
+			"message": "token ID is not a valid ObjectID",
+		})
+	}
+
+	if err := ac.appTokenRepo.Delete(c.Context(), tokenObjID, userID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "delete_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "app token revoked successfully",
 	})
 }

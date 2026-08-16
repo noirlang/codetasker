@@ -18,6 +18,22 @@ export interface User {
   telegram_enabled?: boolean;
 }
 
+/** Scoped App Token (API Key) restricted to reading notifications */
+export interface AppToken {
+  id: string;
+  user_id: string;
+  name: string;
+  token_prefix: string;
+  scope: string; // Always "notifications:read"
+  created_at: string;
+  last_used_at?: string;
+}
+
+export interface CreateAppTokenResponse {
+  app_token: AppToken;
+  raw_token: string;
+}
+
 /* ── Repositories ─────────────────────────────────────────── */
 
 /** A GitHub repository as returned by the backend */

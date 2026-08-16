@@ -28,6 +28,8 @@ import type {
   TaskProposal,
   ProposalStatus,
   Issue,
+  AppToken,
+  CreateAppTokenResponse,
   Branch,
   CommitDetail,
   RepoStats,
@@ -753,6 +755,31 @@ export const proposalsApi = {
    */
   delete: (taskId: string, proposalId: string): Promise<void> =>
     client.delete(`/tasks/${taskId}/proposals/${proposalId}`),
+};
+
+/* ── App Tokens (API Keys for Notifications) ───────────────── */
+
+export const appTokensApi = {
+  /**
+   * List all API app tokens created by the current user.
+   * GET /api/user/app-tokens
+   */
+  list: (): Promise<AppToken[]> =>
+    client.get('/user/app-tokens').then((r) => (r.data.app_tokens as AppToken[]) || []),
+
+  /**
+   * Generate a new scoped App Token (restricted to reading notifications).
+   * POST /api/user/app-tokens
+   */
+  create: (name: string): Promise<CreateAppTokenResponse> =>
+    client.post('/user/app-tokens', { name }).then((r) => r.data as CreateAppTokenResponse),
+
+  /**
+   * Revoke an App Token.
+   * DELETE /api/user/app-tokens/:tokenId
+   */
+  delete: (tokenId: string): Promise<void> =>
+    client.delete(`/user/app-tokens/${tokenId}`),
 };
 
 export default client;

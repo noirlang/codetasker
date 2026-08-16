@@ -63,6 +63,30 @@ type User struct {
 	TelegramEnabled  bool   `bson:"telegram_enabled" json:"telegram_enabled"`
 }
 
+// AppToken Scope constants
+const (
+	ScopeNotificationsRead = "notifications:read"
+)
+
+// AppToken represents an API token created by a user in Settings to access
+// specific read-only API scopes (specifically restricted to reading notifications).
+type AppToken struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID      primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Name        string             `bson:"name" json:"name"`
+	TokenPrefix string             `bson:"token_prefix" json:"token_prefix"` // e.g. "ct_app_a1b2..." for UI display
+	TokenHash   string             `bson:"token_hash" json:"-"`              // SHA-256 hash stored in DB
+	Scope       string             `bson:"scope" json:"scope"`               // Always "notifications:read"
+	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
+	LastUsedAt  *time.Time         `bson:"last_used_at,omitempty" json:"last_used_at,omitempty"`
+}
+
+// CreateAppTokenResponse is returned once when generating an AppToken.
+type CreateAppTokenResponse struct {
+	AppToken AppToken `json:"app_token"`
+	RawToken string   `json:"raw_token"` // Raw secret token, shown ONLY ONCE to the user
+}
+
 // Task represents a single TODO/FIXME/HACK/BUG/NOTE annotation found in a
 // repository file. Tasks are upserted on every webhook push event so the
 // database reflects the current state of the codebase.

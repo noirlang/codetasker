@@ -83,6 +83,7 @@ func main() {
 	notifRepo := repository.NewNotificationRepository(db)
 	activityRepo := repository.NewActivityRepository(db)
 	debtRepo := repository.NewDebtRepository(db)
+	appTokenRepo := repository.NewAppTokenRepository(db)
 
 	// Services
 	authService := service.NewAuthService(cfg, userRepo, log)
@@ -96,7 +97,7 @@ func main() {
 	telegramService := service.NewTelegramService(log)
 
 	// Controllers
-	authCtrl := controller.NewAuthController(authService)
+	authCtrl := controller.NewAuthController(authService, appTokenRepo)
 	repoCtrl := controller.NewRepoController(cfg, githubService, taskService, syncedRepo, collaboratorRepo, userRepo, activityRepo, taskRepo)
 	webhookCtrl := controller.NewWebhookController(taskService)
 	taskCtrl := controller.NewTaskController(taskService, githubService, syncedRepo, collaboratorRepo, commentRepo, proposalRepo, notifRepo, activityRepo, userRepo, emailService, codeOwnerService, telegramService, taskRepo)
@@ -145,7 +146,7 @@ func main() {
 		AllowOrigins:     cfg.FrontendURL,
 		AllowCredentials: true,
 		AllowMethods:     "GET,POST,PATCH,DELETE,OPTIONS",
-		AllowHeaders:     "Content-Type,Authorization",
+		AllowHeaders:     "Content-Type,Authorization,X-App-Token",
 	}))
 
 	// ── Step 7: Register routes ──────────────────────────────────────────────
@@ -176,8 +177,8 @@ func main() {
 	)
 	webhookCtrl.RegisterRoutes(webhooks)
 
-	// All other /api/* routes require a valid JWT.
-	protected := app.Group("/api", middleware.Protected(cfg))
+	// All other /api/* routes require a valid JWT or scoped App Token.
+	protected := app.Group("/api", middleware.Protected(cfg, appTokenRepo, userRepo))
 	authCtrl.RegisterProtectedRoutes(protected)
 	repoCtrl.RegisterRoutes(protected)
 	taskCtrl.RegisterRoutes(protected)

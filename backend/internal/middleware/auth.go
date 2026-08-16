@@ -5,10 +5,12 @@
 package middleware
 
 import (
+	"context"
 	"errors"
 	"strings"
 
 	"github.com/codetasker/backend/internal/config"
+	"github.com/codetasker/backend/internal/repository"
 	jwtware "github.com/gofiber/jwt/v3"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/gofiber/fiber/v2"
@@ -16,44 +18,29 @@ import (
 )
 
 // localKeyUserID is the Locals key under which the authenticated user's
-// ObjectID is stored after a successful JWT validation.
+// ObjectID is stored after a successful JWT or App Token validation.
 const localKeyUserID = "userID"
 
 // localKeyUsername is the Locals key for the authenticated user's GitHub login.
 const localKeyUsername = "username"
 
-// Protected returns a Fiber middleware that validates the JWT carried either in
-// the "Authorization: Bearer <token>" header or in the "auth_token" httpOnly
-// cookie. Downstream handlers can call GetUserID and GetUsername to read the
-// validated identity without touching JWT claims directly.
+// Protected returns a Fiber middleware that validates either standard JWT tokens
+// (via Authorization header / cookie) OR scoped App Tokens (via X-App-Token or Bearer ct_app_...).
 //
-// On a valid token the middleware stores the parsed userID and username in
-// fiber.Ctx.Locals and calls c.Next(). On an invalid or missing token it
-// returns 401 Unauthorized with a JSON error body.
-func Protected(cfg *config.Config) fiber.Handler {
-	// jwtware.New creates a Fiber-compatible middleware that:
-	//   1. Extracts the token from the Authorization header (default behaviour).
-	//   2. Falls back to a cookie extractor configured below.
-	//   3. Validates the signature using HS256 + the configured JWTSecret.
-	//   4. Stores the parsed *jwt.Token in c.Locals("user") on success.
+// App Tokens are strictly restricted to reading notifications (GET /api/notifications).
+// Any attempt to access other endpoints using an App Token returns 403 Forbidden.
+func Protected(cfg *config.Config, appTokenRepo *repository.AppTokenRepository, userRepo *repository.UserRepository) fiber.Handler {
 	jwtMiddleware := jwtware.New(jwtware.Config{
 		SigningKey:    []byte(cfg.JWTSecret),
 		SigningMethod: "HS256",
-		// TokenLookup specifies where to look for the token.
-		// "header:Authorization" is tried first, then "cookie:auth_token".
-		TokenLookup: "header:Authorization,cookie:auth_token",
-		// AuthScheme is the prefix stripped from the Authorization header value.
-		AuthScheme: "Bearer",
-		// ErrorHandler returns a consistent 401 JSON response on any auth failure.
+		TokenLookup:   "header:Authorization,cookie:auth_token",
+		AuthScheme:    "Bearer",
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error":   "unauthorized",
 				"message": "missing or invalid authentication token",
 			})
 		},
-		// SuccessHandler is called after the token is validated. It parses our
-		// custom claims and stores the typed values in Locals so controllers
-		// never have to cast jwt.MapClaims themselves.
 		SuccessHandler: func(c *fiber.Ctx) error {
 			token, ok := c.Locals("user").(*jwt.Token)
 			if !ok {
@@ -69,7 +56,6 @@ func Protected(cfg *config.Config) fiber.Handler {
 				})
 			}
 
-			// Extract the "sub" claim which holds the ObjectID hex string.
 			sub, _ := claims["sub"].(string)
 			objID, err := primitive.ObjectIDFromHex(strings.TrimSpace(sub))
 			if err != nil {
@@ -81,7 +67,6 @@ func Protected(cfg *config.Config) fiber.Handler {
 
 			username, _ := claims["username"].(string)
 
-			// Store typed values so controllers do not need to deal with jwt internals.
 			c.Locals(localKeyUserID, objID)
 			c.Locals(localKeyUsername, username)
 
@@ -89,7 +74,69 @@ func Protected(cfg *config.Config) fiber.Handler {
 		},
 	})
 
-	return jwtMiddleware
+	return func(c *fiber.Ctx) error {
+		// 1. Check for App Token in headers or query
+		rawToken := c.Get("X-App-Token")
+		if rawToken == "" {
+			authHeader := c.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ct_app_") {
+				rawToken = strings.TrimPrefix(authHeader, "Bearer ")
+			} else if strings.HasPrefix(authHeader, "ct_app_") {
+				rawToken = authHeader
+			}
+		}
+
+		// 2. If an App Token is present (starts with "ct_app_")
+		if strings.HasPrefix(rawToken, "ct_app_") {
+			if appTokenRepo == nil {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error":   "unauthorized",
+					"message": "app tokens not supported",
+				})
+			}
+
+			tokenHash := repository.HashToken(rawToken)
+			tokenDoc, err := appTokenRepo.FindByTokenHash(c.Context(), tokenHash)
+			if err != nil || tokenDoc == nil {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error":   "invalid_app_token",
+					"message": "the provided app token is invalid or revoked",
+				})
+			}
+
+			// Scope Check: App Token is strictly restricted to reading notifications ONLY!
+			reqPath := c.Path()
+			isNotificationPath := strings.HasPrefix(reqPath, "/api/notifications")
+			if !isNotificationPath || c.Method() != "GET" {
+				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+					"error":   "invalid_scope",
+					"message": "this app token is restricted to notifications:read scope only (GET /api/notifications)",
+				})
+			}
+
+			// Update last used timestamp
+			go func() {
+				_ = appTokenRepo.UpdateLastUsed(context.Background(), tokenDoc.ID)
+			}()
+
+			username := ""
+			if userRepo != nil {
+				u, _ := userRepo.FindByObjectID(c.Context(), tokenDoc.UserID)
+				if u != nil {
+					username = u.Username
+				}
+			}
+
+			c.Locals(localKeyUserID, tokenDoc.UserID)
+			c.Locals(localKeyUsername, username)
+			c.Locals("isAppToken", true)
+
+			return c.Next()
+		}
+
+		// 3. Otherwise, use standard JWT token validation
+		return jwtMiddleware(c)
+	}
 }
 
 // GetUserID retrieves the authenticated user's MongoDB ObjectID from Fiber's
