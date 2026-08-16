@@ -63,19 +63,20 @@ Panel {
   function loadSettings() {
     serverUrl = Api.getSetting("serverUrl", "https://codetasker.noirlang.tr")
     appToken = Api.getSetting("appToken", "")
-    serverInput.text = serverUrl
-    tokenInput.text = appToken
+    if (serverInput) serverInput.text = serverUrl
+    if (tokenInput) tokenInput.text = appToken
   }
 
   function saveSettings() {
-    serverUrl = serverInput.text.trim() || "https://codetasker.noirlang.tr"
-    appToken = tokenInput.text.trim()
+    serverUrl = serverInput ? serverInput.text.trim() || "https://codetasker.noirlang.tr" : "https://codetasker.noirlang.tr"
+    appToken = tokenInput ? tokenInput.text.trim() : ""
 
     Api.setSetting("serverUrl", serverUrl)
     Api.setSetting("appToken", appToken)
 
     if (appToken) {
       isSetupMode = false
+      errorMessage = ""
       refresh()
       loadNotifications()
     } else {
@@ -113,10 +114,11 @@ Panel {
       loadSettings()
       if (!appToken) {
         isSetupMode = true
+        Qt.callLater(function() { if (tokenInput) tokenInput.forceActiveFocus() })
       } else {
         loadNotifications()
+        Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
       }
-      Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
     }
   }
 
@@ -135,7 +137,7 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: "</>" + (root.unreadCount > 0 ? (" (" + root.unreadCount + ")") : "")
-    labelVisible: !root.vertical
+    labelVisible: true
     hasVisualContent: true
     horizontalMargin: 8.75
     verticalPadding: 8.75
@@ -158,13 +160,14 @@ Panel {
     owner: root
     bar: root.bar
     open: root.opened
-    centerOnBar: true
+    centerOnBar: false
     contentWidth: panel.fittedContentWidth(Style.space(380))
     contentHeight: panel.fittedContentHeight(Style.space(480))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      blocked: (serverInput && serverInput.activeFocus) || (tokenInput && tokenInput.activeFocus)
       onCloseRequested: root.close()
 
       Rectangle {
@@ -324,6 +327,8 @@ Panel {
                   color: "#ffffff"
                   font.pixelSize: 11
                   verticalAlignment: TextInput.AlignVCenter
+                  selectByMouse: true
+                  onAccepted: saveSettings()
                 }
               }
             }
@@ -352,10 +357,11 @@ Panel {
                   anchors.fill: parent
                   anchors.margins: 6
                   text: ""
-                  echoMode: TextInput.Password
                   color: "#ffffff"
                   font.pixelSize: 11
                   verticalAlignment: TextInput.AlignVCenter
+                  selectByMouse: true
+                  onAccepted: saveSettings()
                 }
               }
             }
