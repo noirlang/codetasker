@@ -10,6 +10,7 @@ import "CodeTaskerApi.js" as Api
 Panel {
   id: root
   moduleName: "codetasker.notifications"
+  ipcTarget: "codetasker.notifications"
   manageIpc: false
 
   property var anchorItem: null
@@ -23,6 +24,8 @@ Panel {
   property bool isLoading: false
   property string errorMessage: ""
 
+  readonly property bool opened: root.controller ? root.controller.visible === true : false
+
   function open() {
     loadSettings()
     if (!appToken) {
@@ -30,11 +33,11 @@ Panel {
     } else {
       loadNotifications()
     }
-    root.controller.show()
+    if (root.controller) root.controller.show()
   }
 
   function close() {
-    root.controller.hide()
+    if (root.controller) root.controller.hide()
   }
 
   function toggle() {

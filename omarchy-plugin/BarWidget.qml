@@ -19,6 +19,7 @@ BarWidget {
 
     if (!appToken) {
       root.unreadCount = 0
+      if (panelLoader.item && panelLoader.item.refresh) panelLoader.item.refresh()
       return
     }
 
@@ -26,13 +27,14 @@ BarWidget {
       if (!err) {
         root.unreadCount = count
       }
+      if (panelLoader.item && panelLoader.item.refresh) panelLoader.item.refresh()
     })
   }
 
   Component.onCompleted: root.refresh()
 
   Timer {
-    interval: 10000 // Refresh every 10 seconds
+    interval: 10000 // Refresh unread count every 10 seconds
     repeat: true
     running: true
     onTriggered: root.refresh()
@@ -60,7 +62,11 @@ BarWidget {
     if (panelLoader.item && panelLoader.item.toggle) panelLoader.item.toggle()
   }
 
+  readonly property real openPanelIndicatorWidth: button.labelWidth
+  readonly property real openPanelIndicatorHeight: Math.max(Style.space(10), Math.round(Style.bar.iconSlot * 0.55))
+
   onBarChanged: injectPanel()
+  onSettingsChanged: injectPanel()
 
   Loader {
     id: panelLoader
@@ -83,7 +89,7 @@ BarWidget {
     horizontalMargin: 8.75
     verticalPadding: 8.75
 
-    // Icon color: Red (#ef4444) if unreadCount > 0, White (#ffffff) if unreadCount == 0
+    // Color rule: Red (#ef4444) if unreadCount > 0, White (#ffffff) if unreadCount == 0
     foreground: root.unreadCount > 0 ? "#ef4444" : "#ffffff"
 
     onPressed: function(b) {
