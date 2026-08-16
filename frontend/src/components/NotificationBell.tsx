@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   GitMerge,
@@ -47,7 +48,8 @@ function timeAgo(isoString: string): string {
 function NotificationIcon({ type }: { type: Notification['type'] }) {
   const base = 'shrink-0';
   if (type === 'task_assigned') return <UserCheck size={14} className={`${base} text-[#a0a0a0]`} />;
-  if (type === 'comment_added') return <MessageSquare size={14} className={`${base} text-[#a0a0a0]`} />;
+  if (type === 'comment_added' || type === 'proposal_created' || type === 'proposal_resolved')
+    return <MessageSquare size={14} className={`${base} text-[#a0a0a0]`} />;
   if (type === 'pr_merged')     return <GitMerge size={14} className={`${base} text-[#a0a0a0]`} />;
   return <Bell size={14} className={`${base} text-[#a0a0a0]`} />;
 }
@@ -55,6 +57,7 @@ function NotificationIcon({ type }: { type: Notification['type'] }) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function NotificationBell() {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -127,6 +130,18 @@ export default function NotificationBell() {
     } catch {
       // Refetch on failure
       fetchNotifications();
+    }
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    if (!notification.read) handleMarkRead(notification.id);
+    setOpen(false);
+    if (notification.link) {
+      if (notification.link.startsWith('/')) {
+        navigate(notification.link);
+      } else {
+        window.open(notification.link, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 
@@ -228,12 +243,7 @@ export default function NotificationBell() {
               notifications.map((notification) => (
                 <button
                   key={notification.id}
-                  onClick={() => {
-                    if (!notification.read) handleMarkRead(notification.id);
-                    if (notification.link) {
-                      window.open(notification.link, '_blank', 'noopener,noreferrer');
-                    }
-                  }}
+                  onClick={() => handleNotificationClick(notification)}
                   className={[
                     'flex w-full items-start gap-3 px-4 py-3 text-left',
                     'border-b border-[#1a1a1a] last:border-b-0',

@@ -79,6 +79,7 @@ func main() {
 	syncedRepo := repository.NewSyncedRepository(db)
 	collaboratorRepo := repository.NewCollaboratorRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
+	proposalRepo := repository.NewProposalRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 	activityRepo := repository.NewActivityRepository(db)
 	debtRepo := repository.NewDebtRepository(db)
@@ -98,7 +99,7 @@ func main() {
 	authCtrl := controller.NewAuthController(authService)
 	repoCtrl := controller.NewRepoController(cfg, githubService, taskService, syncedRepo, collaboratorRepo, userRepo, activityRepo, taskRepo)
 	webhookCtrl := controller.NewWebhookController(taskService)
-	taskCtrl := controller.NewTaskController(taskService, githubService, syncedRepo, collaboratorRepo, commentRepo, notifRepo, activityRepo, userRepo, emailService, codeOwnerService, telegramService, taskRepo)
+	taskCtrl := controller.NewTaskController(taskService, githubService, syncedRepo, collaboratorRepo, commentRepo, proposalRepo, notifRepo, activityRepo, userRepo, emailService, codeOwnerService, telegramService, taskRepo)
 	notifCtrl := controller.NewNotificationController(notifRepo)
 	debtCtrl := controller.NewDebtController(debtService, githubService, syncedRepo, collaboratorRepo)
 

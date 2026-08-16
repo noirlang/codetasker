@@ -305,13 +305,15 @@ const (
 
 // Collaborator links a CodeTasker user to a repository with specific permissions/roles.
 type Collaborator struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	RepoID    int64              `bson:"repo_id" json:"repo_id"`
-	UserID    primitive.ObjectID `bson:"user_id" json:"user_id"`
-	Username  string             `bson:"username" json:"username"`
-	AvatarURL string             `bson:"avatar_url" json:"avatar_url"`
-	Role      RepoRole           `bson:"role" json:"role"`
-	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	RepoID       int64              `bson:"repo_id" json:"repo_id"`
+	UserID       primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Username     string             `bson:"username" json:"username"`
+	AvatarURL    string             `bson:"avatar_url" json:"avatar_url"`
+	Role         RepoRole           `bson:"role" json:"role"`
+	AllowedPaths []string           `bson:"allowed_paths,omitempty" json:"allowed_paths,omitempty"`
+	PrivateRepo  string             `bson:"private_repo,omitempty" json:"private_repo,omitempty"`
+	CreatedAt    time.Time          `bson:"created_at" json:"created_at"`
 }
 
 // Comment represents a user comment on a task.
@@ -322,6 +324,29 @@ type Comment struct {
 	Username  string             `bson:"username" json:"username"`
 	AvatarURL string             `bson:"avatar_url" json:"avatar_url"`
 	Content   string             `bson:"content" json:"content"`
+	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
+	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
+}
+
+type ProposalStatus string
+
+const (
+	ProposalStatusPending  ProposalStatus = "pending"
+	ProposalStatusApproved ProposalStatus = "approved"
+	ProposalStatusRejected ProposalStatus = "rejected"
+)
+
+// TaskProposal represents a discussion suggestion/proposal on a task with approval/rejection voting.
+type TaskProposal struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	TaskID    primitive.ObjectID `bson:"task_id" json:"task_id"`
+	UserID    primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Username  string             `bson:"username" json:"username"`
+	AvatarURL string             `bson:"avatar_url" json:"avatar_url"`
+	Title     string             `bson:"title" json:"title"`
+	Content   string             `bson:"content" json:"content"`
+	Status    ProposalStatus     `bson:"status" json:"status"`
+	VotedBy   []string           `bson:"voted_by,omitempty" json:"voted_by,omitempty"`
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
 }
@@ -341,6 +366,12 @@ const (
 
 	// NotifTaskCompleted is sent to the maintainer when a developer marks a task as resolved.
 	NotifTaskCompleted NotificationType = "task_completed"
+
+	// NotifProposalCreated is sent when a proposal is submitted on a task.
+	NotifProposalCreated NotificationType = "proposal_created"
+
+	// NotifProposalResolved is sent when a proposal is approved or rejected.
+	NotifProposalResolved NotificationType = "proposal_resolved"
 )
 
 // Notification represents a notification sent to a user.

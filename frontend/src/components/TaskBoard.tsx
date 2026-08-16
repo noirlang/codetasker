@@ -34,11 +34,14 @@ import {
   Trash2,
   UserMinus,
   AlertCircle,
+  Check,
+  XCircle,
+  Lightbulb,
 } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
-import { commentsApi, reposApi } from '../api/client';
+import { commentsApi, proposalsApi, reposApi } from '../api/client';
 import { useAuthStore } from '../store/authStore';
-import type { Task, TaskStatus, PullRequest, Collaborator, Comment, Issue } from '../types';
+import type { Task, TaskStatus, PullRequest, Collaborator, Comment, Issue, TaskProposal, ProposalStatus } from '../types';
 import Badge from './ui/Badge';
 import Spinner from './ui/Spinner';
 
@@ -124,6 +127,14 @@ function TaskDetailModal({
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [assigning, setAssigning] = useState(false);
 
+  // Proposals & Discussions state
+  const [proposals, setProposals] = useState<TaskProposal[]>([]);
+  const [proposalsLoading, setProposalsLoading] = useState(true);
+  const [newPropTitle, setNewPropTitle] = useState('');
+  const [newPropContent, setNewPropContent] = useState('');
+  const [submittingProp, setSubmittingProp] = useState(false);
+  const [detailTab, setDetailTab] = useState<'comments' | 'proposals'>('comments');
+
   // Local assignee state (for optimistic UI)
   const [localAssignee, setLocalAssignee] = useState<string | null>(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -138,6 +149,16 @@ function TaskDetailModal({
       .then(setComments)
       .catch(() => setComments([]))
       .finally(() => setCommentsLoading(false));
+  }, [task.id]);
+
+  // Load proposals on mount
+  useEffect(() => {
+    setProposalsLoading(true);
+    proposalsApi
+      .list(task.id)
+      .then(setProposals)
+      .catch(() => setProposals([]))
+      .finally(() => setProposalsLoading(false));
   }, [task.id]);
 
   const handleAddComment = async () => {
@@ -162,6 +183,41 @@ function TaskDetailModal({
     } catch {
       // Refetch on failure
       commentsApi.list(task.id).then(setComments).catch(() => {});
+    }
+  };
+
+  const handleAddProposal = async () => {
+    if (!newPropTitle.trim() || submittingProp) return;
+    setSubmittingProp(true);
+    try {
+      const p = await proposalsApi.add(task.id, newPropTitle.trim(), newPropContent.trim());
+      setProposals((prev) => [p, ...prev]);
+      setNewPropTitle('');
+      setNewPropContent('');
+    } catch {
+      // Silently fail
+    } finally {
+      setSubmittingProp(false);
+    }
+  };
+
+  const handleVoteProposal = async (proposalId: string, status: ProposalStatus) => {
+    setProposals((prev) =>
+      prev.map((p) => (p.id === proposalId ? { ...p, status } : p))
+    );
+    try {
+      await proposalsApi.updateStatus(task.id, proposalId, status);
+    } catch {
+      proposalsApi.list(task.id).then(setProposals).catch(() => {});
+    }
+  };
+
+  const handleDeleteProposal = async (proposalId: string) => {
+    setProposals((prev) => prev.filter((p) => p.id !== proposalId));
+    try {
+      await proposalsApi.delete(task.id, proposalId);
+    } catch {
+      proposalsApi.list(task.id).then(setProposals).catch(() => {});
     }
   };
 
@@ -345,89 +401,231 @@ function TaskDetailModal({
           </div>
 
 
-          {/* Comments section */}
-          <div className="px-5 py-4">
-            <div className="flex items-center gap-2 mb-3">
-              <MessageSquare size={12} className="text-[#666666]" />
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Comments</span>
-              <span className="rounded border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[9px] text-[#666666]">
-                {comments.length}
-              </span>
-            </div>
+          {/* Tab Selection (Comments vs Proposals) */}
+          <div className="border-b border-[#1a1a1a] px-5 flex items-center gap-4 bg-[#0d0d0d]">
+            <button
+              onClick={() => setDetailTab('comments')}
+              className={`py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                detailTab === 'comments' ? 'border-white text-white' : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+              }`}
+            >
+              <MessageSquare size={12} />
+              <span>Comments ({comments.length})</span>
+            </button>
 
-            {commentsLoading ? (
-              <div className="flex justify-center py-4">
-                <Spinner size={18} />
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {comments.length === 0 && (
-                  <p className="text-[11px] text-[#666666] py-2 text-center">No comments yet</p>
-                )}
-                {comments.map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="rounded border border-[#1a1a1a] bg-[#0d0d0d] p-3"
+            <button
+              onClick={() => setDetailTab('proposals')}
+              className={`py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                detailTab === 'proposals' ? 'border-white text-white' : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+              }`}
+            >
+              <Lightbulb size={12} />
+              <span>Proposals & Discussions ({proposals.length})</span>
+            </button>
+          </div>
+
+          {/* Comments Tab */}
+          {detailTab === 'comments' && (
+            <div className="px-5 py-4">
+              {commentsLoading ? (
+                <div className="flex justify-center py-4">
+                  <Spinner size={18} />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {comments.length === 0 && (
+                    <p className="text-[11px] text-[#666666] py-2 text-center">No comments yet</p>
+                  )}
+                  {comments.map((comment) => (
+                    <div
+                      key={comment.id}
+                      className="rounded border border-[#1a1a1a] bg-[#0d0d0d] p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          {comment.avatar_url ? (
+                            <img
+                              src={comment.avatar_url}
+                              alt={comment.username}
+                              className="h-5 w-5 rounded-full border border-[#2a2a2a] shrink-0"
+                            />
+                          ) : (
+                            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#2a2a2a]">
+                              <User size={10} className="text-[#666666]" />
+                            </div>
+                          )}
+                          <span className="text-[11px] font-medium text-white">{comment.username}</span>
+                          <span className="text-[9px] text-[#666666] font-mono">{timeAgo(comment.created_at)}</span>
+                        </div>
+                        {comment.username === currentUsername && (
+                          <button
+                            onClick={() => handleDeleteComment(comment.id)}
+                            className="text-[#444444] hover:text-red-400 transition-colors cursor-pointer"
+                            title="Delete comment"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-[#a0a0a0] leading-4 whitespace-pre-wrap">{comment.content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add comment */}
+              <div className="mt-3 flex flex-col gap-2">
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Add a comment…"
+                  rows={2}
+                  className="w-full resize-none rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-2 text-[11px] text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a] transition-colors"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleAddComment();
+                    }
+                  }}
+                />
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleAddComment}
+                    disabled={!newComment.trim() || submitting}
+                    className="flex items-center gap-1.5 rounded border border-[#2a2a2a] bg-white/[0.04] px-3 py-1.5 text-[10px] font-mono text-[#a0a0a0] hover:text-white hover:border-[#3a3a3a] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        {comment.avatar_url ? (
+                    {submitting ? <Spinner size={11} /> : <Send size={10} />}
+                    Comment
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Proposals Tab */}
+          {detailTab === 'proposals' && (
+            <div className="px-5 py-4 flex flex-col gap-4">
+              {proposalsLoading ? (
+                <div className="flex justify-center py-4">
+                  <Spinner size={18} />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {proposals.length === 0 && (
+                    <p className="text-[11px] text-[#666666] py-2 text-center">No proposals or task discussions yet.</p>
+                  )}
+                  {proposals.map((proposal) => (
+                    <div
+                      key={proposal.id}
+                      className="rounded border border-[#222222] bg-[#0d0d0d] p-3.5 flex flex-col gap-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           <img
-                            src={comment.avatar_url}
-                            alt={comment.username}
+                            src={proposal.avatar_url}
+                            alt={proposal.username}
                             className="h-5 w-5 rounded-full border border-[#2a2a2a] shrink-0"
                           />
-                        ) : (
-                          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#2a2a2a]">
-                            <User size={10} className="text-[#666666]" />
-                          </div>
-                        )}
-                        <span className="text-[11px] font-medium text-white">{comment.username}</span>
-                        <span className="text-[9px] text-[#666666] font-mono">{timeAgo(comment.created_at)}</span>
-                      </div>
-                      {comment.username === currentUsername && (
-                        <button
-                          onClick={() => handleDeleteComment(comment.id)}
-                          className="text-[#444444] hover:text-red-400 transition-colors cursor-pointer"
-                          title="Delete comment"
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-[#a0a0a0] leading-4 whitespace-pre-wrap">{comment.content}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+                          <span className="text-[11px] font-medium text-white truncate">{proposal.username}</span>
+                          <span className="text-[9px] text-[#666666] font-mono shrink-0">{timeAgo(proposal.created_at)}</span>
+                        </div>
 
-            {/* Add comment */}
-            <div className="mt-3 flex flex-col gap-2">
-              <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment…"
-                rows={2}
-                className="w-full resize-none rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-2 text-[11px] text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a] transition-colors"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    handleAddComment();
-                  }
-                }}
-              />
-              <div className="flex justify-end">
-                <button
-                  onClick={handleAddComment}
-                  disabled={!newComment.trim() || submitting}
-                  className="flex items-center gap-1.5 rounded border border-[#2a2a2a] bg-white/[0.04] px-3 py-1.5 text-[10px] font-mono text-[#a0a0a0] hover:text-white hover:border-[#3a3a3a] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {submitting ? <Spinner size={11} /> : <Send size={10} />}
-                  Comment
-                </button>
+                        {/* Status Badge */}
+                        {proposal.status === 'approved' && (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono flex items-center gap-1 shrink-0">
+                            <Check size={10} /> Onaylandı
+                          </span>
+                        )}
+                        {proposal.status === 'rejected' && (
+                          <span className="px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-mono flex items-center gap-1 shrink-0">
+                            <XCircle size={10} /> Reddedildi
+                          </span>
+                        )}
+                        {proposal.status === 'pending' && (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono flex items-center gap-1 shrink-0">
+                            <Lightbulb size={10} /> Beklemede
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">{proposal.title}</h4>
+                        {proposal.content && (
+                          <p className="mt-1 text-[11px] text-[#a0a0a0] leading-relaxed whitespace-pre-wrap">{proposal.content}</p>
+                        )}
+                      </div>
+
+                      {/* Vote & Action buttons */}
+                      <div className="flex items-center justify-between border-t border-[#1a1a1a] pt-2 mt-1">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleVoteProposal(proposal.id, 'approved')}
+                            className={`px-2.5 py-1 rounded text-[10px] font-mono flex items-center gap-1 border transition-all cursor-pointer ${
+                              proposal.status === 'approved'
+                                ? 'bg-emerald-500 text-black border-emerald-400 font-bold'
+                                : 'border-[#2a2a2a] text-emerald-400 hover:bg-emerald-500/10'
+                            }`}
+                          >
+                            <Check size={10} /> Onayla
+                          </button>
+                          <button
+                            onClick={() => handleVoteProposal(proposal.id, 'rejected')}
+                            className={`px-2.5 py-1 rounded text-[10px] font-mono flex items-center gap-1 border transition-all cursor-pointer ${
+                              proposal.status === 'rejected'
+                                ? 'bg-red-500 text-white border-red-400 font-bold'
+                                : 'border-[#2a2a2a] text-red-400 hover:bg-red-500/10'
+                            }`}
+                          >
+                            <XCircle size={10} /> Reddet
+                          </button>
+                        </div>
+
+                        {proposal.username === currentUsername && (
+                          <button
+                            onClick={() => handleDeleteProposal(proposal.id)}
+                            className="text-[#444444] hover:text-red-400 transition-colors p-1"
+                            title="Delete proposal"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add Proposal Form */}
+              <div className="mt-2 rounded border border-[#222222] bg-[#161616] p-3 flex flex-col gap-2">
+                <h4 className="text-xs font-semibold text-white flex items-center gap-1">
+                  <Lightbulb size={12} className="text-amber-400" /> Yeni Öneri / Tartışma Başlat
+                </h4>
+                <input
+                  type="text"
+                  value={newPropTitle}
+                  onChange={(e) => setNewPropTitle(e.target.value)}
+                  placeholder="Öneri Başlığı (örn. Auth servisi refactor edilsin)"
+                  className="w-full rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-1.5 text-xs text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a]"
+                />
+                <textarea
+                  value={newPropContent}
+                  onChange={(e) => setNewPropContent(e.target.value)}
+                  placeholder="Öneri detayları ve gerekçesi…"
+                  rows={2}
+                  className="w-full resize-none rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-1.5 text-[11px] text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a]"
+                />
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleAddProposal}
+                    disabled={!newPropTitle.trim() || submittingProp}
+                    className="btn-primary py-1 px-3 text-xs font-medium"
+                  >
+                    {submittingProp ? <Spinner size={11} /> : 'Öneri Gönder'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

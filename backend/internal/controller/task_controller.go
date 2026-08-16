@@ -8,6 +8,7 @@ package controller
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/codetasker/backend/internal/domain"
 	"github.com/codetasker/backend/internal/middleware"
@@ -25,6 +26,7 @@ type TaskController struct {
 	syncedRepoRepo   *repository.SyncedRepository
 	collaboratorRepo *repository.CollaboratorRepository
 	commentRepo      *repository.CommentRepository
+	proposalRepo     *repository.ProposalRepository
 	notifRepo        *repository.NotificationRepository
 	activityRepo     *repository.ActivityRepository
 	userRepo         *repository.UserRepository
@@ -42,6 +44,7 @@ func NewTaskController(
 	syncedRepoRepo *repository.SyncedRepository,
 	collaboratorRepo *repository.CollaboratorRepository,
 	commentRepo *repository.CommentRepository,
+	proposalRepo *repository.ProposalRepository,
 	notifRepo *repository.NotificationRepository,
 	activityRepo *repository.ActivityRepository,
 	userRepo *repository.UserRepository,
@@ -56,6 +59,7 @@ func NewTaskController(
 		syncedRepoRepo:   syncedRepoRepo,
 		collaboratorRepo: collaboratorRepo,
 		commentRepo:      commentRepo,
+		proposalRepo:     proposalRepo,
 		notifRepo:        notifRepo,
 		activityRepo:     activityRepo,
 		userRepo:         userRepo,
@@ -76,6 +80,11 @@ func (tc *TaskController) RegisterRoutes(group fiber.Router) {
 	group.Get("/tasks/:id/comments", tc.ListComments)
 	group.Post("/tasks/:id/comments", tc.AddComment)
 	group.Delete("/tasks/:id/comments/:commentId", tc.DeleteComment)
+	// Proposal / Discussion sub-resources on tasks.
+	group.Get("/tasks/:id/proposals", tc.ListProposals)
+	group.Post("/tasks/:id/proposals", tc.AddProposal)
+	group.Patch("/tasks/:id/proposals/:proposalId", tc.UpdateProposalStatus)
+	group.Delete("/tasks/:id/proposals/:proposalId", tc.DeleteProposal)
 }
 
 // ListTasksByRepo returns all tasks for a repository, identified by the
@@ -748,6 +757,227 @@ func (tc *TaskController) DeleteComment(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "comment deleted successfully"})
+}
+
+// ListProposals retrieves all proposals for a given task ID.
+//
+// Route: GET /api/tasks/:id/proposals
+func (tc *TaskController) ListProposals(c *fiber.Ctx) error {
+	taskIDStr := c.Params("id")
+	taskObjID, err := primitive.ObjectIDFromHex(taskIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_id",
+			"message": "task ID is not a valid ObjectID",
+		})
+	}
+
+	proposals, err := tc.proposalRepo.FindByTaskID(c.Context(), taskObjID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "list_proposals_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"proposals": proposals,
+		"count":     len(proposals),
+	})
+}
+
+// AddProposal creates a new proposal/suggestion on a task.
+//
+// Route: POST /api/tasks/:id/proposals
+func (tc *TaskController) AddProposal(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	user, err := tc.userRepo.FindByID(c.Context(), userID)
+	if err != nil || user == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "user not found"})
+	}
+
+	taskIDStr := c.Params("id")
+	taskObjID, err := primitive.ObjectIDFromHex(taskIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_id",
+			"message": "task ID is not a valid ObjectID",
+		})
+	}
+
+	task, err := tc.taskService.GetTaskByID(c.Context(), taskIDStr)
+	if err != nil || task == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "not_found",
+			"message": "task not found",
+		})
+	}
+
+	var req struct {
+		Title   string `json:"title"`
+		Content string `json:"content"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Title == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_body",
+			"message": "proposal title is required",
+		})
+	}
+
+	proposal := domain.TaskProposal{
+		ID:        primitive.NewObjectID(),
+		TaskID:    taskObjID,
+		UserID:    userID,
+		Username:  user.Username,
+		AvatarURL: user.AvatarURL,
+		Title:     req.Title,
+		Content:   req.Content,
+		Status:    domain.ProposalStatusPending,
+		VotedBy:   []string{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := tc.proposalRepo.Create(c.Context(), &proposal); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "create_proposal_failed",
+			"message": err.Error(),
+		})
+	}
+
+	// Create notification for task maintainer/assignee if present
+	if task.AssigneeID != nil && *task.AssigneeID != userID {
+		_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
+			UserID:    *task.AssigneeID,
+			Type:      domain.NotifProposalCreated,
+			Title:     "New proposal on assigned task",
+			Message:   fmt.Sprintf("%s proposed '%s' on task %s", user.Username, proposal.Title, task.Content),
+			Link:      fmt.Sprintf("/repos/%s?taskId=%s", task.RepoName, task.ID.Hex()),
+			CreatedAt: time.Now(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"proposal": proposal,
+		"message":  "proposal created successfully",
+	})
+}
+
+// UpdateProposalStatus marks a proposal as approved ("onaylandı") or rejected ("reddedildi").
+//
+// Route: PATCH /api/tasks/:id/proposals/:proposalId
+func (tc *TaskController) UpdateProposalStatus(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	user, err := tc.userRepo.FindByID(c.Context(), userID)
+	if err != nil || user == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "user not found"})
+	}
+
+	proposalIDStr := c.Params("proposalId")
+	proposalObjID, err := primitive.ObjectIDFromHex(proposalIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_id",
+			"message": "proposal ID is not a valid ObjectID",
+		})
+	}
+
+	proposal, err := tc.proposalRepo.FindByID(c.Context(), proposalObjID)
+	if err != nil || proposal == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "not_found",
+			"message": "proposal not found",
+		})
+	}
+
+	var req struct {
+		Status domain.ProposalStatus `json:"status"` // "approved" or "rejected"
+	}
+	if err := c.BodyParser(&req); err != nil || (req.Status != domain.ProposalStatusApproved && req.Status != domain.ProposalStatusRejected) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_status",
+			"message": "status must be 'approved' or 'rejected'",
+		})
+	}
+
+	if err := tc.proposalRepo.UpdateStatus(c.Context(), proposalObjID, req.Status, user.Username); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "update_failed",
+			"message": err.Error(),
+		})
+	}
+
+	// Notify proposal creator
+	if proposal.UserID != userID {
+		statusLabel := "approved"
+		if req.Status == domain.ProposalStatusRejected {
+			statusLabel = "rejected"
+		}
+		_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
+			UserID:    proposal.UserID,
+			Type:      domain.NotifProposalResolved,
+			Title:     fmt.Sprintf("Proposal %s by %s", statusLabel, user.Username),
+			Message:   fmt.Sprintf("Your proposal '%s' was %s", proposal.Title, statusLabel),
+			Link:      fmt.Sprintf("/tasks?proposalId=%s", proposalObjID.Hex()),
+			CreatedAt: time.Now(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": fmt.Sprintf("proposal status updated to %s", req.Status),
+		"status":  req.Status,
+	})
+}
+
+// DeleteProposal deletes a proposal. Only the proposal author or repo maintainer can delete it.
+//
+// Route: DELETE /api/tasks/:id/proposals/:proposalId
+func (tc *TaskController) DeleteProposal(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	proposalIDStr := c.Params("proposalId")
+	proposalObjID, err := primitive.ObjectIDFromHex(proposalIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_id",
+			"message": "proposal ID is not a valid ObjectID",
+		})
+	}
+
+	proposal, err := tc.proposalRepo.FindByID(c.Context(), proposalObjID)
+	if err != nil || proposal == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "not_found",
+			"message": "proposal not found",
+		})
+	}
+
+	if proposal.UserID != userID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error":   "forbidden",
+			"message": "only proposal creator can delete this proposal",
+		})
+	}
+
+	if err := tc.proposalRepo.Delete(c.Context(), proposalObjID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "delete_failed",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{"message": "proposal deleted successfully"})
 }
 
 // isNotFoundError checks whether an error message indicates a "not found" condition.

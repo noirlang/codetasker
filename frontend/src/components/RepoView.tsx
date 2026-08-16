@@ -43,6 +43,7 @@ import ActionsPanel from './ActionsPanel';
 import RepoStatsPanel from './RepoStatsPanel';
 import DebtPanel from './DebtPanel';
 import Spinner from './ui/Spinner';
+import NotificationBell from './NotificationBell';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -479,6 +480,7 @@ export default function RepoView() {
             <Users size={13} />
             <span>Collaborators</span>
           </button>
+          <NotificationBell />
         </div>
       </div>
 

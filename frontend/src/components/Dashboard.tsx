@@ -34,6 +34,7 @@ import { useAuthStore } from '../store/authStore';
 import { reposApi, systemApi } from '../api/client';
 import type { Repo, ApiError, Organization, User } from '../types';
 import Spinner from './ui/Spinner';
+import NotificationBell from './NotificationBell';
 
 // ── 3D Tilt Card Helper Component ──────────────────────────────────────────
 function TiltCard({
@@ -899,35 +900,38 @@ export default function Dashboard() {
             <p className="mt-1 text-xs text-[#666666]">{pageDescription}</p>
           </div>
 
-          {/* Organization Selector */}
-          {activeIdx < 2 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#666666] font-mono">Source:</span>
-              <select
-                className="bg-[#111111] border border-[#2a2a2a] rounded text-xs text-white px-3 py-1.5 focus:outline-none focus:border-white transition-colors cursor-pointer"
-                value={selectedOrg || ''}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSelectedOrg(val || null);
-                }}
-              >
-                <option value="">Personal Repositories</option>
-                {orgs.map((org) => (
-                  <option key={org.login} value={org.login}>
-                    {org.login} (Org)
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={fetchRepos}
-                disabled={loading}
-                title="Refresh repositories"
-                className="p-1.5 bg-[#111111] hover:bg-[#1f1f1f] text-[#a0a0a0] hover:text-white border border-[#2a2a2a] rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-              >
-                <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-              </button>
-            </div>
-          )}
+          {/* Header Actions (Organization Selector + Notification Bell) */}
+          <div className="flex items-center gap-3">
+            {activeIdx < 2 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#666666] font-mono">Source:</span>
+                <select
+                  className="bg-[#111111] border border-[#2a2a2a] rounded text-xs text-white px-3 py-1.5 focus:outline-none focus:border-white transition-colors cursor-pointer"
+                  value={selectedOrg || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedOrg(val || null);
+                  }}
+                >
+                  <option value="">Personal Repositories</option>
+                  {orgs.map((org) => (
+                    <option key={org.login} value={org.login}>
+                      {org.login} (Org)
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={fetchRepos}
+                  disabled={loading}
+                  title="Refresh repositories"
+                  className="p-1.5 bg-[#111111] hover:bg-[#1f1f1f] text-[#a0a0a0] hover:text-white border border-[#2a2a2a] rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            )}
+            <NotificationBell />
+          </div>
         </div>
 
         {/* Repos Grid or State Content */}

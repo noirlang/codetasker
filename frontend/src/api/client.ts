@@ -25,6 +25,8 @@ import type {
   ActionWorkflowRun,
   Notification,
   Comment,
+  TaskProposal,
+  ProposalStatus,
   Issue,
   Branch,
   CommitDetail,
@@ -219,35 +221,51 @@ export const reposApi = {
   },
 
   /**
-   * Add a new collaborator with a role.
+   * Add a new collaborator with a role and allowed paths.
    * POST /api/repos/:owner/:repo/collaborators
    */
   addCollaborator: async (
     owner: string,
     repo: string,
     username: string,
-    role: RepoRole
-  ): Promise<{ collaborator: Collaborator; warning?: string }> => {
-    const { data } = await client.post<{ collaborator: Collaborator; warning?: string }>(
+    role: RepoRole,
+    allowedPaths: string[] = []
+  ): Promise<{ collaborator: Collaborator; github_invite_url?: string; warning?: string }> => {
+    const { data } = await client.post<{ collaborator: Collaborator; github_invite_url?: string; warning?: string }>(
       `/repos/${owner}/${repo}/collaborators`,
-      { username, role }
+      { username, role, allowed_paths: allowedPaths }
     );
     return data;
   },
 
   /**
-   * Update a collaborator's role.
+   * Update a collaborator's role, permissions, and sandbox repo link.
    * PATCH /api/repos/:owner/:repo/collaborators/:id
    */
   updateCollaboratorRole: async (
     owner: string,
     repo: string,
     id: string,
-    role: RepoRole
+    role: RepoRole,
+    allowedPaths?: string[],
+    privateRepo?: string
   ): Promise<void> => {
     await client.patch(`/repos/${owner}/${repo}/collaborators/${id}`, {
       role,
+      allowed_paths: allowedPaths,
+      private_repo: privateRepo,
     });
+  },
+
+  syncSandboxRepo: async (
+    owner: string,
+    repo: string,
+    id: string
+  ): Promise<{ message: string; private_repo: string; sandbox_url: string }> => {
+    const { data } = await client.post<{ message: string; private_repo: string; sandbox_url: string }>(
+      `/repos/${owner}/${repo}/collaborators/${id}/sync-sandbox`
+    );
+    return data;
   },
 
   removeCollaborator: async (
@@ -695,6 +713,46 @@ export const commentsApi = {
    */
   delete: (taskId: string, commentId: string) =>
     client.delete(`/tasks/${taskId}/comments/${commentId}`),
+};
+
+// ── Proposals & Task Discussions API ───────────────────────────────────────
+
+export const proposalsApi = {
+  /**
+   * List all proposals for a task.
+   * GET /api/tasks/:id/proposals
+   */
+  list: (taskId: string): Promise<TaskProposal[]> =>
+    client.get(`/tasks/${taskId}/proposals`).then((r) => (r.data.proposals as TaskProposal[]) || []),
+
+  /**
+   * Add a proposal / suggestion to a task.
+   * POST /api/tasks/:id/proposals
+   */
+  add: (taskId: string, title: string, content: string): Promise<TaskProposal> =>
+    client
+      .post(`/tasks/${taskId}/proposals`, { title, content })
+      .then((r) => r.data.proposal as TaskProposal),
+
+  /**
+   * Update proposal status (approved "onaylandı" / rejected "reddedildi").
+   * PATCH /api/tasks/:id/proposals/:proposalId
+   */
+  updateStatus: (
+    taskId: string,
+    proposalId: string,
+    status: ProposalStatus
+  ): Promise<{ message: string; status: ProposalStatus }> =>
+    client
+      .patch(`/tasks/${taskId}/proposals/${proposalId}`, { status })
+      .then((r) => r.data),
+
+  /**
+   * Delete a proposal from a task.
+   * DELETE /api/tasks/:id/proposals/:proposalId
+   */
+  delete: (taskId: string, proposalId: string): Promise<void> =>
+    client.delete(`/tasks/${taskId}/proposals/${proposalId}`),
 };
 
 export default client;

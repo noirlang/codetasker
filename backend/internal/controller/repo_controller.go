@@ -78,6 +78,7 @@ func (rc *RepoController) RegisterRoutes(group fiber.Router) {
 	group.Get("/repos/:owner/:repo/collaborators", rc.GetCollaborators)
 	group.Post("/repos/:owner/:repo/collaborators", rc.AddCollaborator)
 	group.Patch("/repos/:owner/:repo/collaborators/:id", rc.UpdateCollaboratorRole)
+	group.Post("/repos/:owner/:repo/collaborators/:id/sync-sandbox", rc.SyncSandboxRepo)
 	group.Delete("/repos/:owner/:repo/collaborators/:id", rc.RemoveCollaborator)
 
 	// Issues
@@ -1142,8 +1143,9 @@ func (rc *RepoController) AddCollaborator(c *fiber.Ctx) error {
 	}
 
 	type requestBody struct {
-		Username string          `json:"username"`
-		Role     domain.RepoRole `json:"role"`
+		Username     string          `json:"username"`
+		Role         domain.RepoRole `json:"role"`
+		AllowedPaths []string        `json:"allowed_paths"`
 	}
 
 	var body requestBody
@@ -1218,11 +1220,12 @@ func (rc *RepoController) AddCollaborator(c *fiber.Ctx) error {
 	}
 
 	collab := &domain.Collaborator{
-		RepoID:    synced.RepoID,
-		UserID:    invitee.ID,
-		Username:  invitee.Username,
-		AvatarURL: invitee.AvatarURL,
-		Role:      body.Role,
+		RepoID:       synced.RepoID,
+		UserID:       invitee.ID,
+		Username:     invitee.Username,
+		AvatarURL:    invitee.AvatarURL,
+		Role:         body.Role,
+		AllowedPaths: body.AllowedPaths,
 	}
 
 	if err := rc.collaboratorRepo.Create(c.Context(), collab); err != nil {
@@ -1232,23 +1235,27 @@ func (rc *RepoController) AddCollaborator(c *fiber.Ctx) error {
 		})
 	}
 
+	// Direct GitHub invite URL for quick navigation
+	githubInviteURL := fmt.Sprintf("https://github.com/%s/%s/settings/access", owner, repo)
+
 	// Check if the user is a collaborator on the actual GitHub repository
 	isGHCollab, err := rc.githubService.IsCollaborator(c.Context(), userID, owner, repo, body.Username)
 	var warning string
 	if err != nil {
 		fmt.Printf("[DEBUG] Failed to check GitHub collaborator status for user '%s': %v\n", body.Username, err)
 	} else if !isGHCollab {
-		warning = fmt.Sprintf("Note: '%s' is not listed as a collaborator on the GitHub repository. They will not be able to view tasks or push commits until you invite them on GitHub.", body.Username)
+		warning = fmt.Sprintf("Note: '%s' is not listed as a collaborator on GitHub repository. Use the GitHub invite link (%s) to invite them directly.", body.Username, githubInviteURL)
 	}
 
 	return c.JSON(fiber.Map{
-		"message":      "collaborator added successfully",
-		"collaborator": collab,
-		"warning":      warning,
+		"message":            "collaborator added successfully",
+		"collaborator":       collab,
+		"github_invite_url": githubInviteURL,
+		"warning":            warning,
 	})
 }
 
-// UpdateCollaboratorRole updates a collaborator's role.
+// UpdateCollaboratorRole updates a collaborator's role, permissions, and sandbox config.
 //
 // Route: PATCH /api/repos/:owner/:repo/collaborators/:id
 func (rc *RepoController) UpdateCollaboratorRole(c *fiber.Ctx) error {
@@ -1304,7 +1311,9 @@ func (rc *RepoController) UpdateCollaboratorRole(c *fiber.Ctx) error {
 	}
 
 	type requestBody struct {
-		Role domain.RepoRole `json:"role"`
+		Role         domain.RepoRole `json:"role"`
+		AllowedPaths []string        `json:"allowed_paths"`
+		PrivateRepo  string          `json:"private_repo"`
 	}
 
 	var body requestBody
@@ -1359,7 +1368,7 @@ func (rc *RepoController) UpdateCollaboratorRole(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := rc.collaboratorRepo.UpdateRole(c.Context(), collabID, body.Role); err != nil {
+	if err := rc.collaboratorRepo.UpdateRoleAndPermissions(c.Context(), collabID, body.Role, body.AllowedPaths, body.PrivateRepo); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "failed_to_update_role",
 			"message": err.Error(),
@@ -1367,7 +1376,64 @@ func (rc *RepoController) UpdateCollaboratorRole(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"message": "collaborator role updated successfully",
+		"message": "collaborator role and permissions updated successfully",
+	})
+}
+
+// SyncSandboxRepo auto-generates or syncs a private sandbox repository configuration link for a collaborator.
+// Route: POST /api/repos/:owner/:repo/collaborators/:id/sync-sandbox
+func (rc *RepoController) SyncSandboxRepo(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	owner := c.Params("owner")
+	repo := c.Params("repo")
+	collabIDStr := c.Params("id")
+
+	collabID, err := primitive.ObjectIDFromHex(collabIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid_id",
+			"message": "collaborator ID is not a valid ObjectID",
+		})
+	}
+
+	synced, err := rc.syncedRepoRepo.FindByRepoName(c.Context(), owner+"/"+repo)
+	if err != nil || synced == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "synced_repo_not_found",
+			"message": "Repository is not synced",
+		})
+	}
+
+	if synced.UserID != userID {
+		collab, _ := rc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
+		if collab == nil || (collab.Role != domain.RoleOwner && collab.Role != domain.RoleMaintainer) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "forbidden",
+				"message": "Only repo owners and maintainers can configure sandbox repos",
+			})
+		}
+	}
+
+	collab, err := rc.collaboratorRepo.FindByID(c.Context(), collabID)
+	if err != nil || collab == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "collaborator_not_found",
+			"message": "Collaborator not found",
+		})
+	}
+
+	privateRepoName := fmt.Sprintf("%s/%s-sandbox-%s", owner, repo, collab.Username)
+	collab.PrivateRepo = privateRepoName
+	_ = rc.collaboratorRepo.UpdateRoleAndPermissions(c.Context(), collabID, collab.Role, collab.AllowedPaths, privateRepoName)
+
+	return c.JSON(fiber.Map{
+		"message":      "Private sandbox repository configured successfully",
+		"private_repo": privateRepoName,
+		"sandbox_url":  fmt.Sprintf("https://github.com/%s", privateRepoName),
 	})
 }
 

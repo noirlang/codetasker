@@ -65,9 +65,35 @@ func (r *CollaboratorRepository) FindByUserAndRepo(ctx context.Context, userID p
 	return &c, nil
 }
 
+// FindByID retrieves a collaborator by ObjectID.
+func (r *CollaboratorRepository) FindByID(ctx context.Context, id primitive.ObjectID) (*domain.Collaborator, error) {
+	var c domain.Collaborator
+	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&c)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &c, nil
+}
+
 // UpdateRole updates a collaborator's access level role.
 func (r *CollaboratorRepository) UpdateRole(ctx context.Context, id primitive.ObjectID, role domain.RepoRole) error {
 	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{"role": role}})
+	return err
+}
+
+// UpdateRoleAndPermissions updates a collaborator's role, allowed paths, and private repo sync link.
+func (r *CollaboratorRepository) UpdateRoleAndPermissions(ctx context.Context, id primitive.ObjectID, role domain.RepoRole, allowedPaths []string, privateRepo string) error {
+	update := bson.M{
+		"role":          role,
+		"allowed_paths": allowedPaths,
+	}
+	if privateRepo != "" {
+		update["private_repo"] = privateRepo
+	}
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": update})
 	return err
 }
 

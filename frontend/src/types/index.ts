@@ -131,6 +131,8 @@ export interface Collaborator {
   username: string;
   avatar_url: string;
   role: RepoRole;
+  allowed_paths?: string[];
+  private_repo?: string;
   created_at: string;
 }
 
@@ -201,7 +203,7 @@ export interface PullRequest {
   created_at: string;
 }
 
-/* ── Comments ─────────────────────────────────────────────────── */
+/* ── Comments & Proposals ─────────────────────────────────────── */
 
 /** A comment on a task */
 export interface Comment {
@@ -215,13 +217,36 @@ export interface Comment {
   updated_at: string;
 }
 
+export type ProposalStatus = 'pending' | 'approved' | 'rejected';
+
+/** A discussion proposal/suggestion on a task */
+export interface TaskProposal {
+  id: string;
+  task_id: string;
+  user_id: string;
+  username: string;
+  avatar_url: string;
+  title: string;
+  content: string;
+  status: ProposalStatus;
+  voted_by?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 /* ── Notifications ────────────────────────────────────────────── */
 
 /** A user notification from the backend */
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'task_assigned' | 'comment_added' | 'pr_merged';
+  type:
+    | 'task_assigned'
+    | 'comment_added'
+    | 'pr_merged'
+    | 'task_completed'
+    | 'proposal_created'
+    | 'proposal_resolved';
   title: string;
   message: string;
   link?: string;

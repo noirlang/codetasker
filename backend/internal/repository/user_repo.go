@@ -100,6 +100,11 @@ func (r *UserRepository) Upsert(ctx context.Context, user *domain.User) error {
 	return nil
 }
 
+// FindByID retrieves a user document by its MongoDB ObjectID.
+func (r *UserRepository) FindByID(ctx context.Context, id primitive.ObjectID) (*domain.User, error) {
+	return r.FindByObjectID(ctx, id)
+}
+
 // FindByObjectID retrieves a user document by its MongoDB ObjectID.
 // This is used by GithubService to look up a user when only the JWT sub claim
 // (ObjectID hex) is available, rather than the github_id.
