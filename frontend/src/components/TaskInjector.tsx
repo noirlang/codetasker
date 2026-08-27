@@ -8,10 +8,21 @@
  * - Linking GitHub issues and selecting custom branches.
  */
 
-import { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, Plus, Trash2, FilePlus, FileCode } from 'lucide-react';
-import { tasksApi } from '../api/client';
-import type { InjectTaskRequest, TaskLocation, ApiError, Issue } from '../types';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  X,
+  ExternalLink,
+  Plus,
+  Trash2,
+  FilePlus,
+  FileCode,
+  Folder,
+  ChevronRight,
+  CornerLeftUp,
+  FileText,
+} from 'lucide-react';
+import { tasksApi, reposApi } from '../api/client';
+import type { InjectTaskRequest, TaskLocation, ApiError, Issue, FileTreeNode } from '../types';
 import Spinner from './ui/Spinner';
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -27,6 +38,8 @@ interface TaskInjectorProps {
   prefilledLine?: number;
   /** Pre-fill file path (from the currently open file) */
   prefilledFile?: string;
+  /** Repository tree files for interactive folder/file autocomplete */
+  treeFiles?: FileTreeNode[];
 }
 
 interface FormLocation {
@@ -35,6 +48,324 @@ interface FormLocation {
   lineNumber: string;
   description: string;
   isNewFile: boolean;
+}
+
+// ── Path Autocomplete & Interactive Folder Navigator ─────────────────────────
+
+interface PathAutocompleteInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  treeFiles?: FileTreeNode[];
+  disabled?: boolean;
+  placeholder?: string;
+  isNewFile?: boolean;
+}
+
+function PathAutocompleteInput({
+  value,
+  onChange,
+  treeFiles = [],
+  disabled,
+  placeholder,
+  isNewFile,
+}: PathAutocompleteInputProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Index files and directories from flat tree
+  const { allFilePaths, allDirPaths } = useMemo(() => {
+    if (!treeFiles || treeFiles.length === 0) {
+      return { allFilePaths: [], allDirPaths: [] };
+    }
+    const files: string[] = [];
+    const dirs = new Set<string>();
+
+    for (const item of treeFiles) {
+      if (item.type === 'blob') {
+        files.push(item.path);
+      } else if (item.type === 'tree') {
+        dirs.add(item.path.endsWith('/') ? item.path : `${item.path}/`);
+      }
+      // Deriving directories from path segments
+      const segments = item.path.split('/');
+      for (let i = 1; i < segments.length; i++) {
+        dirs.add(segments.slice(0, i).join('/') + '/');
+      }
+    }
+
+    return {
+      allFilePaths: files.sort(),
+      allDirPaths: Array.from(dirs).sort(),
+    };
+  }, [treeFiles]);
+
+  // Compute current directory, search prefix, and suggestions
+  const { currentDir, parentDir, breadcrumbs, directDirs, directFiles, otherFiles } = useMemo(() => {
+    const trimmed = value.trim();
+    const lastSlashIndex = trimmed.lastIndexOf('/');
+    const currDir = lastSlashIndex !== -1 ? trimmed.substring(0, lastSlashIndex + 1) : '';
+    const prefix = lastSlashIndex !== -1 ? trimmed.substring(lastSlashIndex + 1).toLowerCase() : trimmed.toLowerCase();
+
+    // Breadcrumbs
+    const crumbs: { name: string; path: string }[] = [];
+    if (currDir) {
+      const parts = currDir.split('/').filter(Boolean);
+      let acc = '';
+      for (const part of parts) {
+        acc += `${part}/`;
+        crumbs.push({ name: part, path: acc });
+      }
+    }
+
+    // Parent directory (for Up button)
+    const pDir = currDir.replace(/[^/]+\/$/, '');
+
+    // Direct Subdirectories
+    const dDirs = allDirPaths
+      .filter((dir) => {
+        if (!dir.startsWith(currDir) || dir === currDir) return false;
+        const rel = dir.substring(currDir.length);
+        const parts = rel.split('/').filter(Boolean);
+        return parts.length === 1;
+      })
+      .map((dir) => {
+        const rel = dir.substring(currDir.length);
+        const name = rel.replace('/', '');
+        return {
+          fullPath: dir,
+          name,
+          type: 'dir' as const,
+        };
+      })
+      .filter((d) => !prefix || d.name.toLowerCase().includes(prefix) || d.name.toLowerCase().startsWith(prefix));
+
+    // Direct Files
+    const dFiles = allFilePaths
+      .filter((file) => {
+        if (!file.startsWith(currDir)) return false;
+        const rel = file.substring(currDir.length);
+        return !rel.includes('/');
+      })
+      .map((file) => {
+        const name = file.substring(currDir.length);
+        return {
+          fullPath: file,
+          name,
+          type: 'file' as const,
+        };
+      })
+      .filter((f) => !prefix || f.name.toLowerCase().includes(prefix) || f.name.toLowerCase().startsWith(prefix));
+
+    // Other matches elsewhere in repo (if user typed something and it didn't end with slash)
+    let oFiles: { fullPath: string; name: string; fullDisplay: string; type: 'file' }[] = [];
+    if (prefix.length >= 2 && !trimmed.endsWith('/')) {
+      oFiles = allFilePaths
+        .filter((f) => !f.startsWith(currDir) && f.toLowerCase().includes(prefix))
+        .slice(0, 8)
+        .map((f) => ({
+          fullPath: f,
+          name: f.split('/').pop() || f,
+          fullDisplay: f,
+          type: 'file' as const,
+        }));
+    }
+
+    return {
+      currentDir: currDir,
+      parentDir: pDir,
+      breadcrumbs: crumbs,
+      directDirs: dDirs,
+      directFiles: dFiles,
+      otherFiles: oFiles,
+    };
+  }, [value, allDirPaths, allFilePaths]);
+
+  const handleSelectDir = (dirPath: string) => {
+    onChange(dirPath);
+    setIsOpen(true);
+    inputRef.current?.focus();
+  };
+
+  const handleSelectFile = (filePath: string) => {
+    onChange(filePath);
+    setIsOpen(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setIsOpen(false);
+    } else if (e.key === 'ArrowDown' && !isOpen) {
+      setIsOpen(true);
+    }
+  };
+
+  const hasSuggestions = directDirs.length > 0 || directFiles.length > 0 || otherFiles.length > 0 || Boolean(currentDir);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <input
+          ref={inputRef}
+          type="text"
+          className="input font-mono text-xs w-full pr-7"
+          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => {
+            setIsOpen((prev) => !prev);
+            inputRef.current?.focus();
+          }}
+          className="absolute right-2 text-[#666666] hover:text-[#aaaaaa] p-0.5 cursor-pointer"
+          title="Browse repository folders and files"
+        >
+          <Folder size={12} className={isOpen ? 'text-[#10b981]' : ''} />
+        </button>
+      </div>
+
+      {/* Autocomplete / Folder Browser Dropdown */}
+      {isOpen && hasSuggestions && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 flex flex-col rounded-md border border-[#333333] bg-[#121212] shadow-2xl shadow-black/90 max-h-60 overflow-hidden animate__animated animate__fadeIn animate__faster">
+          {/* Breadcrumb Header Bar */}
+          <div className="flex items-center justify-between border-b border-[#222222] bg-[#181818] px-2.5 py-1.5 text-[10px] font-mono text-[#888888]">
+            <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap min-w-0">
+              <button
+                type="button"
+                onClick={() => handleSelectDir('')}
+                className="hover:text-white transition-colors cursor-pointer text-[#666666]"
+                title="Go to root"
+              >
+                root
+              </button>
+              {breadcrumbs.map((crumb, idx) => (
+                <span key={crumb.path} className="flex items-center gap-0.5">
+                  <ChevronRight size={10} className="text-[#444444]" />
+                  <button
+                    type="button"
+                    onClick={() => handleSelectDir(crumb.path)}
+                    className={`hover:text-white transition-colors cursor-pointer ${
+                      idx === breadcrumbs.length - 1 ? 'text-[#10b981] font-semibold' : 'text-[#a0a0a0]'
+                    }`}
+                  >
+                    {crumb.name}
+                  </button>
+                </span>
+              ))}
+            </div>
+
+            {currentDir && (
+              <button
+                type="button"
+                onClick={() => handleSelectDir(parentDir)}
+                className="flex items-center gap-1 text-[9px] text-[#888888] hover:text-white bg-[#222222] hover:bg-[#2a2a2a] px-1.5 py-0.5 rounded transition-all ml-2 shrink-0 cursor-pointer"
+                title="Up one folder level (..)"
+              >
+                <CornerLeftUp size={9} />
+                <span>Up</span>
+              </button>
+            )}
+          </div>
+
+          {/* Items list */}
+          <div className="overflow-y-auto max-h-48 divide-y divide-[#181818]">
+            {/* Subdirectories */}
+            {directDirs.map((dir) => (
+              <button
+                key={dir.fullPath}
+                type="button"
+                onClick={() => handleSelectDir(dir.fullPath)}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-left hover:bg-[#1a1a1a] transition-colors cursor-pointer group"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Folder size={12} className="text-[#f59e0b] shrink-0 group-hover:scale-110 transition-transform" />
+                  <span className="font-mono text-xs text-[#e0e0e0] group-hover:text-white truncate">
+                    {dir.name}/
+                  </span>
+                </div>
+                <span className="text-[9px] font-mono text-[#555555] group-hover:text-[#888888] uppercase tracking-wider">
+                  dir
+                </span>
+              </button>
+            ))}
+
+            {/* Direct Files */}
+            {directFiles.map((file) => (
+              <button
+                key={file.fullPath}
+                type="button"
+                onClick={() => handleSelectFile(file.fullPath)}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-left hover:bg-[#1a1a1a] transition-colors cursor-pointer group"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileCode size={12} className="text-[#3b82f6] shrink-0 group-hover:scale-110 transition-transform" />
+                  <span className="font-mono text-xs text-[#bbbbbb] group-hover:text-white truncate">
+                    {file.name}
+                  </span>
+                </div>
+                <span className="text-[9px] font-mono text-[#555555] group-hover:text-[#888888]">
+                  {file.name.split('.').pop() || 'file'}
+                </span>
+              </button>
+            ))}
+
+            {/* Other matches */}
+            {otherFiles.length > 0 && (
+              <div className="bg-[#0f0f0f]">
+                <div className="px-3 py-1 text-[8px] font-mono text-[#555555] uppercase tracking-wider bg-[#141414]">
+                  Other matches in repository
+                </div>
+                {otherFiles.map((file) => (
+                  <button
+                    key={file.fullPath}
+                    type="button"
+                    onClick={() => handleSelectFile(file.fullPath)}
+                    className="w-full flex items-center justify-between px-3 py-1.5 text-left hover:bg-[#1a1a1a] transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText size={11} className="text-[#888888] shrink-0" />
+                      <span className="font-mono text-[11px] text-[#888888] group-hover:text-white truncate">
+                        {file.fullDisplay}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {directDirs.length === 0 && directFiles.length === 0 && otherFiles.length === 0 && (
+              <div className="p-3 text-center text-xs text-[#666666] font-mono">
+                {isNewFile ? 'No existing folders match — file will be created here.' : 'No files or folders found.'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -48,7 +379,23 @@ export default function TaskInjector({
   issues,
   prefilledLine,
   prefilledFile,
+  treeFiles,
 }: TaskInjectorProps) {
+  const [internalTreeFiles, setInternalTreeFiles] = useState<FileTreeNode[]>([]);
+
+  useEffect(() => {
+    if (treeFiles && treeFiles.length > 0) {
+      setInternalTreeFiles(treeFiles);
+    } else if (isOpen && repoOwner && repoName) {
+      reposApi
+        .getTree(repoOwner, repoName, defaultBranch || 'main')
+        .then((flat) => setInternalTreeFiles(flat || []))
+        .catch(() => {});
+    }
+  }, [treeFiles, isOpen, repoOwner, repoName, defaultBranch]);
+
+  const activeTreeFiles = (treeFiles && treeFiles.length > 0) ? treeFiles : internalTreeFiles;
+
   // ── Form state ────────────────────────────────────────────────────────────
   const [locations, setLocations] = useState<FormLocation[]>([
     {
@@ -469,16 +816,13 @@ export default function TaskInjector({
                         <label className="text-[10px] text-[#666666] block mb-1 font-mono">
                           FILE PATH
                         </label>
-                        <input
-                          type="text"
-                          className="input font-mono text-xs"
-                          style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                          placeholder={loc.isNewFile ? "src/modules/new_service.go" : "src/handlers/auth.go"}
+                        <PathAutocompleteInput
                           value={loc.filePath}
-                          onChange={(e) => handleUpdateLocation(loc.id, { filePath: e.target.value })}
+                          onChange={(newPath) => handleUpdateLocation(loc.id, { filePath: newPath })}
+                          treeFiles={activeTreeFiles}
                           disabled={isSubmitting}
-                          autoComplete="off"
-                          spellCheck={false}
+                          placeholder={loc.isNewFile ? "src/modules/new_service.go" : "src/handlers/auth.go"}
+                          isNewFile={loc.isNewFile}
                         />
                       </div>
 

@@ -271,6 +271,9 @@ export default function RepoView() {
   // Right sidebar toggle state (Tasks / PRs / Actions / Debt panel)
   const [rightPanelOpen,  setRightPanelOpen]  = useState(true);
 
+  // Flat tree files for autocompletion / task injector
+  const [treeFiles,       setTreeFiles]       = useState<FileTreeNode[]>([]);
+
   // Collaborator list state
   const [collabOpen,      setCollabOpen]      = useState(false);
 
@@ -329,6 +332,7 @@ export default function RepoView() {
       try {
         const flat = await reposApi.getTree(owner, repoName, currentBranch);
         if (!cancelled) {
+          setTreeFiles(flat || []);
           setTreeNodes(buildTree(flat));
         }
       } catch (err) {
@@ -398,6 +402,7 @@ export default function RepoView() {
   const handleMergeComplete = useCallback(() => {
     // Refresh tree on default branch
     reposApi.getTree(owner, repoName, defaultBranch).then((flat) => {
+      setTreeFiles(flat || []);
       setTreeNodes(buildTree(flat));
       setCurrentBranch(defaultBranch);
     }).catch(err => console.error(err));
@@ -417,6 +422,7 @@ export default function RepoView() {
       setFileContent(newContent);
       setCurrentBranch(branch);
       const flat = await reposApi.getTree(owner, repoName, branch);
+      setTreeFiles(flat || []);
       setTreeNodes(buildTree(flat));
       fetchPulls();
     } catch (err) {
@@ -785,6 +791,7 @@ export default function RepoView() {
         issues={issues}
         prefilledLine={prefilledLine}
         prefilledFile={selectedFile ?? undefined}
+        treeFiles={treeFiles}
       />
 
       {/* ── Collaborator Manager slide-out panel ────────────────────────── */}
