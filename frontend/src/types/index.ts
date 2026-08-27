@@ -116,16 +116,25 @@ export interface FileContent {
 
 /* ── Task Injection ───────────────────────────────────────── */
 
-/** Payload sent to POST /api/tasks/inject to create a PR with a new TODO */
-export interface InjectTaskRequest {
-  repo_owner: string;
-  repo_name: string;
+/** Represents a single target file and line in a multi-location task injection */
+export interface TaskLocation {
   file_path: string;
   line_number: number;
   description: string;
+  is_new_file: boolean;
+}
+
+/** Payload sent to POST /api/tasks/inject to create a PR with new TODO/FIXME/etc. annotations */
+export interface InjectTaskRequest {
+  repo_owner: string;
+  repo_name: string;
+  file_path?: string;
+  line_number?: number;
+  description?: string;
   branch: string;
   type: string;
   issue_url?: string;
+  locations?: TaskLocation[];
 }
 
 /* ── API Error ────────────────────────────────────────────── */
