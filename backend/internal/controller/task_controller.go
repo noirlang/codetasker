@@ -8,6 +8,7 @@ package controller
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/codetasker/backend/internal/domain"
@@ -407,25 +408,60 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 		})
 	}
 
+	// Normalise single-location requests into Locations slice for backward compatibility
+	if len(req.Locations) == 0 && req.FilePath != "" {
+		req.Locations = []domain.TaskLocation{
+			{
+				FilePath:    req.FilePath,
+				LineNumber:  req.LineNumber,
+				Description: req.Description,
+				IsNewFile:   false,
+			},
+		}
+	}
+
 	// Validate required fields.
-	if req.RepoOwner == "" || req.RepoName == "" || req.FilePath == "" ||
-		req.Description == "" || req.Branch == "" {
+	if req.RepoOwner == "" || req.RepoName == "" || req.Branch == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "missing_fields",
-			"message": "repo_owner, repo_name, file_path, description, and branch are required",
+			"message": "repo_owner, repo_name, and branch are required",
 		})
 	}
 
-	if req.LineNumber < 1 {
+	if len(req.Locations) == 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "invalid_field",
-			"message": "line_number must be >= 1",
+			"error":   "missing_locations",
+			"message": "at least one task location (file_path and description) is required",
 		})
+	}
+
+	// Validate each location
+	for i, loc := range req.Locations {
+		if strings.TrimSpace(loc.FilePath) == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":   "invalid_location",
+				"message": fmt.Sprintf("location #%d: file_path is required", i+1),
+			})
+		}
+		if strings.TrimSpace(loc.Description) == "" && strings.TrimSpace(req.Description) == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":   "invalid_location",
+				"message": fmt.Sprintf("location #%d: description is required", i+1),
+			})
+		}
+		if !loc.IsNewFile && loc.LineNumber < 1 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":   "invalid_location",
+				"message": fmt.Sprintf("location #%d: line_number must be >= 1 for existing files", i+1),
+			})
+		}
 	}
 
 	// Verify collaborator permissions before injecting TODO.
+	var repoID int64
 	synced, err := tc.syncedRepoRepo.FindByRepoName(c.Context(), req.RepoOwner+"/"+req.RepoName)
 	if err == nil && synced != nil {
+		repoID = synced.RepoID
 		if synced.UserID != userID {
 			collab, _ := tc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
 			if collab == nil || (collab.Role != domain.RoleOwner && collab.Role != domain.RoleMaintainer && collab.Role != domain.RoleDeveloper) {
@@ -437,7 +473,7 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 		}
 	}
 
-	// Inject the TODO via the GitHub API pipeline and get back the PR URL.
+	// Inject the TODO(s) via the GitHub API pipeline and get back the PR URL.
 	prURL, err := tc.githubService.InjectTODO(c.Context(), userID, &req)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -448,21 +484,6 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 
 	// Look up the actor so we can set creator fields on the task.
 	actor, _ := tc.userRepo.FindByObjectID(c.Context(), userID)
-
-	// Upsert the new task in MongoDB so it appears immediately without waiting
-	// for the webhook to fire and process the PR merge.
-	taskType := req.Type
-	if taskType == "" {
-		taskType = "TODO"
-	}
-
-	// Resolve maintainer via CODEOWNERS before building the task struct.
-	maintainerUsername, maintainerEmail := tc.codeOwnerService.ResolveMaintainer(
-		c.Context(), userID, req.RepoOwner, req.RepoName, req.FilePath,
-	)
-
-	// Build task with creator and maintainer fields already populated so they
-	// are written into $setOnInsert on first insert.
 	createdByUsername := ""
 	createdByAvatarURL := ""
 	if actor != nil {
@@ -470,30 +491,50 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 		createdByAvatarURL = actor.AvatarURL
 	}
 
-	task := &domain.Task{
-		RepoID:             synced.RepoID,
-		RepoName:           req.RepoOwner + "/" + req.RepoName,
-		FilePath:           req.FilePath,
-		LineNumber:         req.LineNumber,
-		Content:            req.Description,
-		Type:               taskType,
-		Status:             domain.TaskStatusOpen,
-		IssueURL:           req.IssueURL,
-		CreatedByUsername:  createdByUsername,
-		CreatedByAvatarURL: createdByAvatarURL,
-		MaintainerUsername: maintainerUsername,
-		MaintainerEmail:    maintainerEmail,
+	taskType := req.Type
+	if taskType == "" {
+		taskType = "TODO"
 	}
 
-	if err := tc.taskService.UpsertInjectedTask(c.Context(), task); err != nil {
-		// Log but don't fail — the PR was created successfully; the task will
-		// appear in the DB after the webhook processes the merged commit.
-		_ = err
+	// Upsert all new tasks in MongoDB so they appear immediately in the dashboard
+	for _, loc := range req.Locations {
+		locDesc := strings.TrimSpace(loc.Description)
+		if locDesc == "" {
+			locDesc = req.Description
+		}
+		lineNum := loc.LineNumber
+		if lineNum < 1 {
+			lineNum = 1
+		}
+
+		maintainerUsername, maintainerEmail := tc.codeOwnerService.ResolveMaintainer(
+			c.Context(), userID, req.RepoOwner, req.RepoName, loc.FilePath,
+		)
+
+		task := &domain.Task{
+			RepoID:             repoID,
+			RepoName:           req.RepoOwner + "/" + req.RepoName,
+			FilePath:           loc.FilePath,
+			LineNumber:         lineNum,
+			Content:            locDesc,
+			Type:               taskType,
+			Status:             domain.TaskStatusOpen,
+			IssueURL:           req.IssueURL,
+			CreatedByUsername:  createdByUsername,
+			CreatedByAvatarURL: createdByAvatarURL,
+			MaintainerUsername: maintainerUsername,
+			MaintainerEmail:    maintainerEmail,
+		}
+
+		if err := tc.taskService.UpsertInjectedTask(c.Context(), task); err != nil {
+			_ = err
+		}
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"message": "TODO injected successfully",
-		"pr_url":  prURL,
+		"message":         "TODO injected successfully",
+		"pr_url":          prURL,
+		"locations_count": len(req.Locations),
 	})
 }
 

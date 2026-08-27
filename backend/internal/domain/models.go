@@ -168,9 +168,24 @@ type Task struct {
 	MaintainerEmail string `bson:"maintainer_email,omitempty" json:"maintainer_email,omitempty"`
 }
 
+// TaskLocation represents a single file+line target within an inject task request.
+type TaskLocation struct {
+	// FilePath is the repository-relative path of the file to modify or create.
+	FilePath string `json:"file_path"`
+
+	// LineNumber is the 1-based line number for insertion (defaults to 1 for new files).
+	LineNumber int `json:"line_number"`
+
+	// Description is the specific note/description for this location.
+	Description string `json:"description"`
+
+	// IsNewFile indicates whether this file should be created from scratch.
+	IsNewFile bool `json:"is_new_file"`
+}
+
 // InjectTaskRequest is the request body for POST /api/tasks/inject.
 // It describes where and what TODO comment the user wants to insert
-// into their repository via the GitHub API.
+// into their repository via the GitHub API. Supports single and multi-location injections.
 type InjectTaskRequest struct {
 	// RepoOwner is the GitHub username or organisation that owns the repository.
 	RepoOwner string `json:"repo_owner" validate:"required"`
@@ -178,14 +193,14 @@ type InjectTaskRequest struct {
 	// RepoName is the repository name (not full name, just the repo part).
 	RepoName string `json:"repo_name" validate:"required"`
 
-	// FilePath is the repository-relative path of the file to modify.
-	FilePath string `json:"file_path" validate:"required"`
+	// FilePath is the repository-relative path of the file to modify (for single-location requests).
+	FilePath string `json:"file_path,omitempty"`
 
-	// LineNumber is the 1-based line number at which the TODO comment is inserted.
-	LineNumber int `json:"line_number" validate:"required,min=1"`
+	// LineNumber is the 1-based line number at which the TODO comment is inserted (for single-location requests).
+	LineNumber int `json:"line_number,omitempty"`
 
 	// Description is the human-readable text that will appear after the TODO keyword.
-	Description string `json:"description" validate:"required"`
+	Description string `json:"description,omitempty"`
 
 	// Branch is the base branch to read from and create the PR against.
 	Branch string `json:"branch" validate:"required"`
@@ -195,6 +210,9 @@ type InjectTaskRequest struct {
 
 	// IssueURL is the linked GitHub Issue URL.
 	IssueURL string `json:"issue_url,omitempty"`
+
+	// Locations contains multiple target files/lines/descriptions if multi-location injection is used.
+	Locations []TaskLocation `json:"locations,omitempty"`
 }
 
 // UpdateTaskRequest is the request body for PATCH /api/tasks/:id.

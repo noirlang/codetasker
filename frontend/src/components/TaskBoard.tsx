@@ -235,7 +235,6 @@ function TaskDetailModal({
     }
   };
 
-  const displayPath = task.file_path.split('/').slice(-2).join('/');
   const shortSha = task.commit_sha.slice(0, 7);
 
   return (
@@ -253,10 +252,10 @@ function TaskDetailModal({
             <Badge type={task.type} />
             <div className="min-w-0">
               <p className="text-sm text-white font-medium leading-snug line-clamp-2">{task.content}</p>
-              <div className="mt-1 flex items-center gap-2">
-                <span className="font-mono text-[10px] text-[#666666]">{displayPath}</span>
-                <span className="font-mono text-[10px] text-[#666666]">L{task.line_number}</span>
-                <span className="font-mono text-[10px] text-[#666666]">{shortSha}</span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="rounded bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#888888]">{task.file_path}</span>
+                <span className="rounded bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#888888]">L{task.line_number}</span>
+                <span className="font-mono text-[10px] text-[#555555]">{shortSha}</span>
               </div>
             </div>
           </div>
@@ -728,12 +727,12 @@ function TaskCard({
           onClick={() => onTaskClick ? onTaskClick(task.file_path, task.line_number) : onInjectClick(task.line_number)}
           title="Click to view code at this line"
         >
-          {/* Top row: type badge + file path */}
+          {/* Top row: type badge + file path & line */}
           <div className="flex min-w-0 items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <Badge type={task.type} />
               <span
-                className="min-w-0 truncate font-mono text-[10px] text-[#666666]"
+                className="min-w-0 truncate font-mono text-[11px] text-[#888888] hover:text-[#cccccc] transition-colors"
                 style={{ fontFamily: "'JetBrains Mono', monospace" }}
                 title={task.file_path}
               >
@@ -741,7 +740,7 @@ function TaskCard({
               </span>
             </div>
             <span
-              className="font-mono text-[10px] text-[#666666] shrink-0"
+              className="rounded bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#888888] shrink-0"
               style={{ fontFamily: "'JetBrains Mono', monospace" }}
             >
               L{task.line_number}

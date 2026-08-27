@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -326,13 +327,20 @@ func (s *GithubService) GetContents(ctx context.Context, userID primitive.Object
 //  2. Get the latest commit SHA on the target branch.
 //  3. Get the tree SHA from that commit.
 //  4. Fetch and decode the target file's current content.
-//  5. Insert the TODO comment at the requested line number.
-//  6. Create a new blob with the modified content.
-//  7. Create a new tree that replaces the old blob with the new one.
-//  8. Create a new commit pointing at the new tree.
-//  9. Create a new branch `codetasker/inject-<unix-timestamp>`.
-//  10. Open a PR from that branch into the base branch.
-//  11. Return the PR URL.
+// InjectTODO creates a new branch, commits the requested TODO comments into the
+// targeted files (supporting multi-location and creating new files), opens a pull request, and returns the PR HTML URL.
+//
+// The pipeline executes the following steps:
+//  1. Validate repository, branch, and file paths (SSRF guards).
+//  2. Resolve the latest commit on the base branch and its tree.
+//  3. Group locations by file path, fetching existing files or creating new ones.
+//  4. Insert TODO comments at the specified line numbers with appropriate comment syntax.
+//  5. Create blobs for all modified and newly created files.
+//  6. Create a new tree referencing all updated/created blobs.
+//  7. Create a new commit pointing at the new tree.
+//  8. Create a new branch `codetasker/inject-<unix-timestamp>`.
+//  9. Open a structured PR with details of all modified and created files.
+//  10. Return the PR URL.
 func (s *GithubService) InjectTODO(ctx context.Context, userID primitive.ObjectID, req *domain.InjectTaskRequest) (string, error) {
 	// ── SSRF guards ─────────────────────────────────────────────────────────
 	if err := validateName(req.RepoOwner, "repo_owner"); err != nil {
@@ -345,13 +353,40 @@ func (s *GithubService) InjectTODO(ctx context.Context, userID primitive.ObjectI
 		return "", err
 	}
 
-	// file_path may contain slashes — validate each segment individually.
-	for _, segment := range strings.Split(req.FilePath, "/") {
-		if segment == "" {
-			continue
+	// Normalise single-location requests into Locations slice for backward compatibility
+	if len(req.Locations) == 0 && req.FilePath != "" {
+		req.Locations = []domain.TaskLocation{
+			{
+				FilePath:    req.FilePath,
+				LineNumber:  req.LineNumber,
+				Description: req.Description,
+				IsNewFile:   false,
+			},
 		}
-		if err := validateName(segment, "file_path segment"); err != nil {
-			return "", fmt.Errorf("invalid file_path %q: %w", req.FilePath, err)
+	}
+
+	if len(req.Locations) == 0 {
+		return "", fmt.Errorf("no task locations provided")
+	}
+
+	tagType := req.Type
+	if tagType == "" {
+		tagType = "TODO"
+	}
+
+	// Validate file paths for all locations (SSRF check)
+	for _, loc := range req.Locations {
+		path := strings.TrimSpace(loc.FilePath)
+		if path == "" {
+			return "", fmt.Errorf("file_path cannot be empty")
+		}
+		for _, segment := range strings.Split(path, "/") {
+			if segment == "" {
+				continue
+			}
+			if err := validateName(segment, "file_path segment"); err != nil {
+				return "", fmt.Errorf("invalid file_path %q: %w", loc.FilePath, err)
+			}
 		}
 	}
 
@@ -380,74 +415,148 @@ func (s *GithubService) InjectTODO(ctx context.Context, userID primitive.ObjectI
 
 	commitTreeSHA := commit.GetTree().GetSHA()
 
-	// ── Step 3 & 4: Fetch and decode the target file ─────────────────────────
-	opts := &github.RepositoryContentGetOptions{Ref: branch}
-	fileContent, _, _, err := client.Repositories.GetContents(ctx, owner, repo, req.FilePath, opts)
-	if err != nil {
-		return "", fmt.Errorf("InjectTODO GetContents(%s): %w", req.FilePath, err)
+	// ── Step 3: Group locations by FilePath ─────────────────────────────────
+	type fileGroup struct {
+		isNew     bool
+		locations []domain.TaskLocation
+	}
+	fileMap := make(map[string]*fileGroup)
+	var orderedFiles []string
+
+	for _, loc := range req.Locations {
+		path := strings.TrimSpace(loc.FilePath)
+		if path == "" {
+			continue
+		}
+		fg, exists := fileMap[path]
+		if !exists {
+			fg = &fileGroup{
+				isNew:     loc.IsNewFile,
+				locations: nil,
+			}
+			fileMap[path] = fg
+			orderedFiles = append(orderedFiles, path)
+		} else if loc.IsNewFile {
+			fg.isNew = true
+		}
+		fg.locations = append(fg.locations, loc)
 	}
 
-	existingContent, err := fileContent.GetContent()
-	if err != nil {
-		return "", fmt.Errorf("InjectTODO decode file content: %w", err)
+	// ── Step 4: Process each file and generate modified contents ─────────────
+	fileContents := make(map[string]string)
+
+	for _, filePath := range orderedFiles {
+		fg := fileMap[filePath]
+		commentSymbol := getCommentPrefix(filePath)
+
+		if fg.isNew {
+			// For new files, build content from locations
+			var lines []string
+			for _, loc := range fg.locations {
+				desc := strings.TrimSpace(loc.Description)
+				if desc == "" {
+					desc = req.Description
+				}
+				todoLine := fmt.Sprintf("%s %s: %s", commentSymbol, tagType, desc)
+				lines = append(lines, todoLine)
+			}
+			fileContents[filePath] = strings.Join(lines, "\n") + "\n"
+		} else {
+			// Fetch existing file content from GitHub
+			opts := &github.RepositoryContentGetOptions{Ref: branch}
+			fc, _, _, err := client.Repositories.GetContents(ctx, owner, repo, filePath, opts)
+			if err != nil {
+				return "", fmt.Errorf("InjectTODO GetContents(%s): %w", filePath, err)
+			}
+
+			existingContent, err := fc.GetContent()
+			if err != nil {
+				return "", fmt.Errorf("InjectTODO decode file content (%s): %w", filePath, err)
+			}
+
+			lines := strings.Split(existingContent, "\n")
+
+			// Sort locations descending by line number so earlier insertions don't alter target line numbers
+			locs := make([]domain.TaskLocation, len(fg.locations))
+			copy(locs, fg.locations)
+			sort.SliceStable(locs, func(i, j int) bool {
+				return locs[i].LineNumber > locs[j].LineNumber
+			})
+
+			for _, loc := range locs {
+				desc := strings.TrimSpace(loc.Description)
+				if desc == "" {
+					desc = req.Description
+				}
+				todoLine := fmt.Sprintf("%s %s: %s", commentSymbol, tagType, desc)
+
+				lineNum := loc.LineNumber
+				if lineNum < 1 {
+					lineNum = 1
+				}
+				insertAt := lineNum - 1
+				if insertAt < 0 {
+					insertAt = 0
+				}
+				if insertAt > len(lines) {
+					insertAt = len(lines)
+				}
+
+				// Insert line
+				lines = append(lines, "")
+				copy(lines[insertAt+1:], lines[insertAt:])
+				lines[insertAt] = todoLine
+			}
+
+			fileContents[filePath] = strings.Join(lines, "\n")
+		}
 	}
 
-	// ── Step 5: Insert the TODO comment at the requested line ─────────────────
-	lines := strings.Split(existingContent, "\n")
-
-	commentSymbol := getCommentPrefix(req.FilePath)
-	tagType := req.Type
-	if tagType == "" {
-		tagType = "TODO"
-	}
-	todoLine := fmt.Sprintf("%s %s: %s", commentSymbol, tagType, req.Description)
-
-	insertAt := req.LineNumber - 1 // convert to 0-based index
-	if insertAt < 0 {
-		insertAt = 0
-	}
-	if insertAt > len(lines) {
-		insertAt = len(lines)
-	}
-
-	// Insert by growing the slice.
-	lines = append(lines, "")
-	copy(lines[insertAt+1:], lines[insertAt:])
-	lines[insertAt] = todoLine
-
-	modifiedContent := strings.Join(lines, "\n")
-
-	// ── Step 6: Create a new blob for the modified file ───────────────────────
+	// ── Step 5: Create Blobs and Tree Entries for all files ───────────────────
+	var treeEntries []*github.TreeEntry
 	encodingStr := "base64"
-	encodedContent := base64.StdEncoding.EncodeToString([]byte(modifiedContent))
-
-	blob, _, err := client.Git.CreateBlob(ctx, owner, repo, &github.Blob{
-		Content:  &encodedContent,
-		Encoding: &encodingStr,
-	})
-	if err != nil {
-		return "", fmt.Errorf("InjectTODO CreateBlob: %w", err)
-	}
-
-	// ── Step 7: Create a new tree referencing the updated blob ────────────────
-	fileMode := "100644" // regular file mode
+	fileMode := "100644"
 	blobType := "blob"
-	filePath := req.FilePath // local var so we can take its address
 
-	newTree, _, err := client.Git.CreateTree(ctx, owner, repo, commitTreeSHA, []*github.TreeEntry{
-		{
-			Path: &filePath,
+	for _, filePath := range orderedFiles {
+		content := fileContents[filePath]
+		encodedContent := base64.StdEncoding.EncodeToString([]byte(content))
+
+		blob, _, err := client.Git.CreateBlob(ctx, owner, repo, &github.Blob{
+			Content:  &encodedContent,
+			Encoding: &encodingStr,
+		})
+		if err != nil {
+			return "", fmt.Errorf("InjectTODO CreateBlob(%s): %w", filePath, err)
+		}
+
+		pathCopy := filePath
+		treeEntries = append(treeEntries, &github.TreeEntry{
+			Path: &pathCopy,
 			Mode: &fileMode,
 			Type: &blobType,
 			SHA:  blob.SHA,
-		},
-	})
+		})
+	}
+
+	// ── Step 6: Create a new tree referencing all updated blobs ───────────────
+	newTree, _, err := client.Git.CreateTree(ctx, owner, repo, commitTreeSHA, treeEntries)
 	if err != nil {
 		return "", fmt.Errorf("InjectTODO CreateTree: %w", err)
 	}
 
-	// ── Step 8: Create the new commit ─────────────────────────────────────────
-	commitMsg := fmt.Sprintf("[CodeTasker] Add TODO at %s:%d", req.FilePath, req.LineNumber)
+	// ── Step 7: Create the new commit ─────────────────────────────────────────
+	var commitMsg string
+	if len(req.Locations) == 1 {
+		loc := req.Locations[0]
+		if loc.IsNewFile {
+			commitMsg = fmt.Sprintf("[CodeTasker] Create %s with %s", loc.FilePath, tagType)
+		} else {
+			commitMsg = fmt.Sprintf("[CodeTasker] Add %s at %s:%d", tagType, loc.FilePath, loc.LineNumber)
+		}
+	} else {
+		commitMsg = fmt.Sprintf("[CodeTasker] Add %s across %d location(s)", tagType, len(req.Locations))
+	}
 
 	newCommit, _, err := client.Git.CreateCommit(ctx, owner, repo, &github.Commit{
 		Message: &commitMsg,
@@ -458,7 +567,7 @@ func (s *GithubService) InjectTODO(ctx context.Context, userID primitive.ObjectI
 		return "", fmt.Errorf("InjectTODO CreateCommit: %w", err)
 	}
 
-	// ── Step 9: Create the new branch ─────────────────────────────────────────
+	// ── Step 8: Create the new branch ─────────────────────────────────────────
 	newBranchName := fmt.Sprintf("codetasker/inject-%d", time.Now().Unix())
 	newRefName := "refs/heads/" + newBranchName
 
@@ -470,14 +579,48 @@ func (s *GithubService) InjectTODO(ctx context.Context, userID primitive.ObjectI
 		return "", fmt.Errorf("InjectTODO CreateRef (%s): %w", newBranchName, err)
 	}
 
-	// ── Step 10: Open the pull request ────────────────────────────────────────
-	prTitle := fmt.Sprintf("[CodeTasker] Add TODO: %s", req.Description)
-	prBody := fmt.Sprintf(
-		"This PR was automatically generated by **CodeTasker**.\n\n"+
-			"**File:** `%s`  \n**Line:** %d  \n**TODO:** %s\n",
-		req.FilePath, req.LineNumber, req.Description,
-	)
+	// ── Step 9: Open the pull request with structured details ────────────────
+	var prTitle string
+	if len(req.Locations) == 1 {
+		loc := req.Locations[0]
+		desc := loc.Description
+		if desc == "" {
+			desc = req.Description
+		}
+		if loc.IsNewFile {
+			prTitle = fmt.Sprintf("[CodeTasker] Create %s: %s", loc.FilePath, desc)
+		} else {
+			prTitle = fmt.Sprintf("[CodeTasker] Add %s: %s", tagType, desc)
+		}
+	} else {
+		prTitle = fmt.Sprintf("[CodeTasker] Add %d %s task(s)", len(req.Locations), tagType)
+	}
 
+	var bodyBuilder strings.Builder
+	bodyBuilder.WriteString("This PR was automatically generated by **CodeTasker**.\n\n")
+	bodyBuilder.WriteString("### 📋 Task Injection Details\n\n")
+	bodyBuilder.WriteString("| # | Type | Action | Target / File | Line | Description |\n")
+	bodyBuilder.WriteString("|---|---|---|---|---|---|\n")
+
+	for i, loc := range req.Locations {
+		action := "Modified file"
+		lineStr := fmt.Sprintf("L%d", loc.LineNumber)
+		if loc.IsNewFile {
+			action = "✨ Created new file"
+			lineStr = "L1"
+		}
+		desc := loc.Description
+		if desc == "" {
+			desc = req.Description
+		}
+		bodyBuilder.WriteString(fmt.Sprintf("| %d | `%s` | %s | `%s` | %s | %s |\n", i+1, tagType, action, loc.FilePath, lineStr, desc))
+	}
+
+	if req.IssueURL != "" {
+		bodyBuilder.WriteString(fmt.Sprintf("\n**Linked Issue:** %s\n", req.IssueURL))
+	}
+
+	prBody := bodyBuilder.String()
 	pr, _, err := client.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: &prTitle,
 		Body:  &prBody,
@@ -488,14 +631,13 @@ func (s *GithubService) InjectTODO(ctx context.Context, userID primitive.ObjectI
 		return "", fmt.Errorf("InjectTODO CreatePullRequest: %w", err)
 	}
 
-	s.log.Info("TODO injected via PR",
+	s.log.Info("TODO(s) injected via PR",
 		zap.String("repo", owner+"/"+repo),
-		zap.String("file", req.FilePath),
-		zap.Int("line", req.LineNumber),
+		zap.Int("locations_count", len(req.Locations)),
 		zap.String("pr_url", pr.GetHTMLURL()),
 	)
 
-	// ── Step 11: Return PR URL ────────────────────────────────────────────────
+	// ── Step 10: Return PR URL ───────────────────────────────────────────────
 	return pr.GetHTMLURL(), nil
 }
 
