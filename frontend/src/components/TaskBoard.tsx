@@ -69,8 +69,8 @@ interface TaskBoardProps {
   repoId: number;
   repoOwner: string;
   repoName: string;
-  /** Called when user clicks "Inject TODO" — optionally passes a pre-filled line */
-  onInjectClick: (lineNumber?: number) => void;
+  /** Called when user clicks "Inject TODO" — optionally passes a pre-filled line and file path */
+  onInjectClick: (lineNumber?: number, filePath?: string) => void;
   /** Called when user clicks a task card to jump to the code */
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   /** List of active pull requests for linking */
@@ -113,12 +113,14 @@ function TaskDetailModal({
   currentUsername,
   onClose,
   onAssign,
+  onInjectClick,
 }: {
   task: Task;
   collaborators: Collaborator[];
   currentUsername: string;
   onClose: () => void;
   onAssign: (taskId: string, username: string | null) => Promise<void>;
+  onInjectClick?: (lineNumber?: number, filePath?: string) => void;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
@@ -259,12 +261,29 @@ function TaskDetailModal({
               </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded p-1 text-[#666666] hover:text-white transition-colors cursor-pointer"
-          >
-            <X size={14} />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {onInjectClick && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onInjectClick(task.line_number, task.file_path);
+                }}
+                className="flex items-center gap-1 text-[10px] font-mono text-[#10b981] hover:text-white bg-[#10b981]/10 hover:bg-[#10b981]/30 border border-[#10b981]/30 rounded px-2 py-1 transition-all cursor-pointer"
+                title="Add a new line / task annotation to this file"
+              >
+                <Plus size={10} />
+                <span>Add Line</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="shrink-0 rounded p-1 text-[#666666] hover:text-white transition-colors cursor-pointer"
+              aria-label="Close modal"
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -695,7 +714,7 @@ function TaskCard({
 }: {
   task: Task;
   index: number;
-  onInjectClick: (lineNumber?: number) => void;
+  onInjectClick: (lineNumber?: number, filePath?: string) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   issues: Issue[];
@@ -724,8 +743,13 @@ function TaskCard({
               ? 'border-[#3a3a3a] bg-[#242424]'
               : 'hover:border-[#3a3a3a]',
           ].join(' ')}
-          onClick={() => onTaskClick ? onTaskClick(task.file_path, task.line_number) : onInjectClick(task.line_number)}
-          title="Click to view code at this line"
+          onClick={() => {
+            if (onTaskClick) onTaskClick(task.file_path, task.line_number);
+            if (task.status === 'open') {
+              onInjectClick(task.line_number, task.file_path);
+            }
+          }}
+          title={task.status === 'open' ? 'Click to view code and add/inject line' : 'Click to view code at this line'}
         >
           {/* Top row: type badge + file path & line */}
           <div className="flex min-w-0 items-center justify-between gap-2">
@@ -739,12 +763,29 @@ function TaskCard({
                 {displayPath}
               </span>
             </div>
-            <span
-              className="rounded bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#888888] shrink-0"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              L{task.line_number}
-            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span
+                className="rounded bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#888888]"
+                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                L{task.line_number}
+              </span>
+              {task.status === 'open' && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onTaskClick) onTaskClick(task.file_path, task.line_number);
+                    onInjectClick(task.line_number, task.file_path);
+                  }}
+                  className="flex items-center gap-0.5 text-[9px] font-mono text-[#10b981] hover:text-white bg-[#10b981]/10 hover:bg-[#10b981]/30 border border-[#10b981]/30 rounded px-1.5 py-0.5 transition-all cursor-pointer"
+                  title="Add a new line / annotation to this file"
+                >
+                  <Plus size={9} />
+                  <span>Line</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Content */}
@@ -916,7 +957,7 @@ function KanbanColumn({
   columnId: TaskStatus;
   label: string;
   tasks: Task[];
-  onInjectClick: (lineNumber?: number) => void;
+  onInjectClick: (lineNumber?: number, filePath?: string) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   issues: Issue[];
@@ -989,7 +1030,7 @@ function TaskListItem({
   onOpenDetail,
 }: {
   task: Task;
-  onInjectClick: (lineNumber?: number) => void;
+  onInjectClick: (lineNumber?: number, filePath?: string) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   issues: Issue[];
@@ -1006,7 +1047,13 @@ function TaskListItem({
   return (
     <div
       className="card flex items-center justify-between gap-3 px-3 py-2.5 transition-colors duration-150 hover:border-[#3a3a3a] cursor-pointer"
-      onClick={() => onTaskClick ? onTaskClick(task.file_path, task.line_number) : onInjectClick(task.line_number)}
+      onClick={() => {
+        if (onTaskClick) onTaskClick(task.file_path, task.line_number);
+        if (task.status === 'open') {
+          onInjectClick(task.line_number, task.file_path);
+        }
+      }}
+      title={task.status === 'open' ? 'Click to view code and add/inject line' : 'Click to view code at this line'}
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <Badge type={task.type} />
@@ -1017,6 +1064,21 @@ function TaskListItem({
         >
           L{task.line_number}
         </span>
+        {task.status === 'open' && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onTaskClick) onTaskClick(task.file_path, task.line_number);
+              onInjectClick(task.line_number, task.file_path);
+            }}
+            className="flex items-center gap-0.5 text-[9px] font-mono text-[#10b981] hover:text-white bg-[#10b981]/10 hover:bg-[#10b981]/30 border border-[#10b981]/30 rounded px-1.5 py-0.5 transition-all cursor-pointer shrink-0"
+            title="Add a new line / annotation to this file"
+          >
+            <Plus size={9} />
+            <span>+ Line</span>
+          </button>
+        )}
         <p className="flex-1 truncate text-xs text-[#a0a0a0]">
           {task.content}
         </p>
@@ -1145,7 +1207,7 @@ function ListView({
   onOpenDetail,
 }: {
   tasks: Task[];
-  onInjectClick: (lineNumber?: number) => void;
+  onInjectClick: (lineNumber?: number, filePath?: string) => void;
   onTaskClick?: (filePath: string, lineNumber: number) => void;
   pulls: PullRequest[];
   issues: Issue[];
@@ -1399,6 +1461,7 @@ export default function TaskBoard({
           currentUsername={currentUser?.username ?? ''}
           onClose={() => setDetailTask(null)}
           onAssign={handleAssign}
+          onInjectClick={onInjectClick}
         />
       )}
     </>

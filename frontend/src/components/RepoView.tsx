@@ -28,6 +28,8 @@ import {
   RefreshCw,
   BarChart2,
   ShieldAlert,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 import { reposApi } from '../api/client';
 import { useTaskStore } from '../store/taskStore';
@@ -266,6 +268,9 @@ export default function RepoView() {
   const [injectorOpen,    setInjectorOpen]    = useState(false);
   const [prefilledLine,   setPrefilledLine]   = useState<number | undefined>();
 
+  // Right sidebar toggle state (Tasks / PRs / Actions / Debt panel)
+  const [rightPanelOpen,  setRightPanelOpen]  = useState(true);
+
   // Collaborator list state
   const [collabOpen,      setCollabOpen]      = useState(false);
 
@@ -430,12 +435,15 @@ export default function RepoView() {
     setInjectorOpen(true);
   }, []);
 
-  // ── Open injector from TaskBoard (no pre-filled line) ───────────────────
-
-  const handleInjectClick = useCallback((lineNumber?: number) => {
+  // ── Open injector from TaskBoard (with optional pre-filled line and file) ─
+  const handleInjectClick = useCallback((lineNumber?: number, filePath?: string) => {
+    if (filePath) {
+      setSelectedFile(filePath);
+      handleFileSelect(filePath);
+    }
     setPrefilledLine(lineNumber);
     setInjectorOpen(true);
-  }, []);
+  }, [handleFileSelect]);
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -481,6 +489,23 @@ export default function RepoView() {
             <span>Collaborators</span>
           </button>
           <NotificationBell />
+
+          <div className="h-4 w-px bg-[#2a2a2a]" />
+
+          <button
+            className={`py-1 px-2.5 text-xs flex items-center gap-1.5 rounded transition-all cursor-pointer ${
+              rightPanelOpen
+                ? 'bg-[#1a1a1a] text-white border border-[#333333]'
+                : 'text-[#888888] hover:text-white border border-[#222222] hover:border-[#333333]'
+            }`}
+            onClick={() => setRightPanelOpen((prev) => !prev)}
+            title={rightPanelOpen ? 'Collapse side panel (Tasks, PRs, Debt)' : 'Expand side panel (Tasks, PRs, Debt)'}
+          >
+            {rightPanelOpen ? <PanelRightClose size={13} /> : <PanelRightOpen size={13} />}
+            <span className="text-[10px] font-mono hidden md:inline">
+              {rightPanelOpen ? 'Hide Panel' : 'Show Panel'}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -634,109 +659,120 @@ export default function RepoView() {
         </main>
 
         {/* ── Right pane: Task board / PRs (320px) ──────────────────────── */}
-        <aside
-          className="panel flex w-80 shrink-0 flex-col overflow-hidden border-l border-r-0 animate__animated animate__slideInRight"
-          style={{ animationDuration: '0.4s' }}
-          aria-label="Right side panel"
-        >
-          {/* Right Tabs */}
-          <div className="flex h-9 border-b border-[#2a2a2a] px-2 gap-1 bg-[#111111] items-end shrink-0">
-            <button
-              onClick={() => setRightTab('tasks')}
-              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
-                rightTab === 'tasks'
-                  ? 'border-white text-white'
-                  : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
-              }`}
-            >
-              Tasks
-            </button>
-            <button
-              onClick={() => setRightTab('pulls')}
-              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
-                rightTab === 'pulls'
-                  ? 'border-white text-white'
-                  : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
-              }`}
-            >
-              <GitPullRequest size={11} />
-              Pull Requests
-            </button>
-            <button
-              onClick={() => setRightTab('actions')}
-              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
-                rightTab === 'actions'
-                  ? 'border-white text-white'
-                  : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
-              }`}
-            >
-              <Activity size={11} />
-              Actions
-            </button>
-            <button
-              onClick={() => setRightTab('debt')}
-              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
-                rightTab === 'debt'
-                  ? 'border-white text-white'
-                  : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
-              }`}
-            >
-              <ShieldAlert size={11} />
-              Debt
-            </button>
-            <button
-              onClick={() => setRightTab('analytics')}
-              className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
-                rightTab === 'analytics'
-                  ? 'border-white text-white'
-                  : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
-              }`}
-            >
-              <BarChart2 size={11} />
-              Analytics
-            </button>
-          </div>
+        {rightPanelOpen && (
+          <aside
+            className="panel flex w-80 shrink-0 flex-col overflow-hidden border-l border-r-0 animate__animated animate__fadeInRight"
+            style={{ animationDuration: '0.2s' }}
+            aria-label="Right side panel"
+          >
+            {/* Right Tabs */}
+            <div className="flex h-9 border-b border-[#2a2a2a] px-2 gap-1 bg-[#111111] items-end shrink-0">
+              <button
+                onClick={() => setRightTab('tasks')}
+                className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
+                  rightTab === 'tasks'
+                    ? 'border-white text-white'
+                    : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+                }`}
+              >
+                Tasks
+              </button>
+              <button
+                onClick={() => setRightTab('pulls')}
+                className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
+                  rightTab === 'pulls'
+                    ? 'border-white text-white'
+                    : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+                }`}
+              >
+                <GitPullRequest size={11} />
+                Pull Requests
+              </button>
+              <button
+                onClick={() => setRightTab('actions')}
+                className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
+                  rightTab === 'actions'
+                    ? 'border-white text-white'
+                    : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+                }`}
+              >
+                <Activity size={11} />
+                Actions
+              </button>
+              <button
+                onClick={() => setRightTab('debt')}
+                className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
+                  rightTab === 'debt'
+                    ? 'border-white text-white'
+                    : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+                }`}
+              >
+                <ShieldAlert size={11} />
+                Debt
+              </button>
+              <button
+                onClick={() => setRightTab('analytics')}
+                className={`px-3 py-1.5 text-[10px] font-semibold border-b-2 transition-all duration-150 flex items-center gap-1 cursor-pointer shrink-0 ${
+                  rightTab === 'analytics'
+                    ? 'border-white text-white'
+                    : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
+                }`}
+              >
+                <BarChart2 size={11} />
+                Analytics
+              </button>
 
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {rightTab === 'tasks' ? (
-              <TaskBoard
-                repoId={repoId}
-                repoOwner={owner}
-                repoName={repoName}
-                onInjectClick={handleInjectClick}
-                onTaskClick={handleTaskClick}
-                pulls={pulls}
-                issues={issues}
-                onLinkTaskToPR={linkTaskToPR}
-                onLinkTaskToIssue={linkTaskToIssue}
-              />
-            ) : rightTab === 'pulls' ? (
-              <PullRequestPanel
-                owner={owner}
-                repoName={repoName}
-                currentBranch={currentBranch}
-                onMergeComplete={handleMergeComplete}
-              />
-            ) : rightTab === 'actions' ? (
-              <ActionsPanel
-                owner={owner}
-                repoName={repoName}
-                currentBranch={currentBranch}
-              />
-            ) : rightTab === 'debt' ? (
-              <DebtPanel
-                owner={owner}
-                repoName={repoName}
-                repoId={repoId}
-              />
-            ) : (
-              <RepoStatsPanel
-                owner={owner}
-                repoName={repoName}
-              />
-            )}
-          </div>
-        </aside>
+              <div className="flex-1" />
+              <button
+                onClick={() => setRightPanelOpen(false)}
+                className="p-1 text-[#666666] hover:text-white transition-colors cursor-pointer self-center mb-1 mr-1"
+                title="Collapse side panel"
+              >
+                <PanelRightClose size={13} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {rightTab === 'tasks' ? (
+                <TaskBoard
+                  repoId={repoId}
+                  repoOwner={owner}
+                  repoName={repoName}
+                  onInjectClick={handleInjectClick}
+                  onTaskClick={handleTaskClick}
+                  pulls={pulls}
+                  issues={issues}
+                  onLinkTaskToPR={linkTaskToPR}
+                  onLinkTaskToIssue={linkTaskToIssue}
+                />
+              ) : rightTab === 'pulls' ? (
+                <PullRequestPanel
+                  owner={owner}
+                  repoName={repoName}
+                  currentBranch={currentBranch}
+                  onMergeComplete={handleMergeComplete}
+                />
+              ) : rightTab === 'actions' ? (
+                <ActionsPanel
+                  owner={owner}
+                  repoName={repoName}
+                  currentBranch={currentBranch}
+                />
+              ) : rightTab === 'debt' ? (
+                <DebtPanel
+                  owner={owner}
+                  repoName={repoName}
+                  repoId={repoId}
+                />
+              ) : (
+                <RepoStatsPanel
+                  owner={owner}
+                  repoName={repoName}
+                />
+              )}
+            </div>
+          </aside>
+        )}
       </div>
 
       {/* ── Task Injector slide-out panel ────────────────────────────────── */}
