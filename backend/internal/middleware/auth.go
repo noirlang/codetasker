@@ -104,22 +104,6 @@ func Protected(cfg *config.Config, appTokenRepo *repository.AppTokenRepository, 
 				})
 			}
 
-			// If scope is explicitly set to notifications:read and request is not notifications, check scope
-			if tokenDoc.Scope == domain.ScopeNotificationsRead {
-				reqPath := c.Path()
-				isNotificationPath := strings.HasPrefix(reqPath, "/api/notifications")
-				isAllowedMethod := c.Method() == "GET" || c.Method() == "PATCH"
-				if !isNotificationPath || !isAllowedMethod {
-					// Also allow user profile / me check
-					if !strings.HasPrefix(reqPath, "/api/auth/me") {
-						return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-							"error":   "invalid_scope",
-							"message": "this app token is restricted to notifications:read scope only (/api/notifications)",
-						})
-					}
-				}
-			}
-
 			// Update last used timestamp
 			go func() {
 				_ = appTokenRepo.UpdateLastUsed(context.Background(), tokenDoc.ID)

@@ -303,10 +303,14 @@ func (ac *AuthController) CreateAppToken(c *fiber.Ctx) error {
 	}
 
 	var req struct {
-		Name string `json:"name"`
+		Name  string `json:"name"`
+		Scope string `json:"scope"`
 	}
 	if err := c.BodyParser(&req); err != nil || req.Name == "" {
-		req.Name = "Notification Token"
+		req.Name = "CLI / API Token"
+	}
+	if req.Scope == "" {
+		req.Scope = domain.ScopeAll
 	}
 
 	// Generate 32 cryptographically secure random bytes
@@ -330,7 +334,7 @@ func (ac *AuthController) CreateAppToken(c *fiber.Ctx) error {
 		Name:        req.Name,
 		TokenPrefix: prefix,
 		TokenHash:   tokenHash,
-		Scope:       domain.ScopeNotificationsRead, // Strictly restricted to notifications:read!
+		Scope:       req.Scope,
 		CreatedAt:   time.Now(),
 	}
 

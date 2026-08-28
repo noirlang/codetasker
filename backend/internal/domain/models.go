@@ -65,18 +65,19 @@ type User struct {
 
 // AppToken Scope constants
 const (
+	ScopeAll               = "all"
 	ScopeNotificationsRead = "notifications:read"
 )
 
 // AppToken represents an API token created by a user in Settings to access
-// specific read-only API scopes (specifically restricted to reading notifications).
+// API endpoints, CLI operations, or specific scopes.
 type AppToken struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID      primitive.ObjectID `bson:"user_id" json:"user_id"`
 	Name        string             `bson:"name" json:"name"`
 	TokenPrefix string             `bson:"token_prefix" json:"token_prefix"` // e.g. "ct_app_a1b2..." for UI display
 	TokenHash   string             `bson:"token_hash" json:"-"`              // SHA-256 hash stored in DB
-	Scope       string             `bson:"scope" json:"scope"`               // Always "notifications:read"
+	Scope       string             `bson:"scope" json:"scope"`               // "all" or specific scope
 	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
 	LastUsedAt  *time.Time         `bson:"last_used_at,omitempty" json:"last_used_at,omitempty"`
 }
