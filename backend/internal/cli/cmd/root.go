@@ -12,7 +12,7 @@ import (
 var (
 	cfgFile string
 	cfg     *config.Config
-	version = "0.2.0"
+	version = "0.0.1"
 )
 
 // RootCmd is the base command for CodeTasker CLI.

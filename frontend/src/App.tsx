@@ -12,6 +12,7 @@ import { useAuthStore } from './store/authStore';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import RepoView from './components/RepoView';
+import CLI from './components/CLI';
 import Spinner from './components/ui/Spinner';
 
 // ── Protected route wrapper ────────────────────────────────────────────────
@@ -74,6 +75,7 @@ export default function App() {
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<Login />} />
+      <Route path="/cli" element={<CLI />} />
 
       {/* Root → dashboard redirect */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, EffectCreative, Pagination } from 'swiper/modules';
 import ScrollReveal from 'scrollreveal';
@@ -10,6 +11,7 @@ import {
   Layers,
   RefreshCw,
   Sparkles,
+  Terminal,
 } from 'lucide-react';
 
 // Swiper CSS imports
@@ -69,6 +71,8 @@ function TiltCard({
 
 // ── Main Login Page ────────────────────────────────────────────────────────
 export default function Login() {
+  const navigate = useNavigate();
+
   useEffect(() => {
     // Initialize ScrollReveal
     const sr = ScrollReveal({
@@ -128,12 +132,19 @@ export default function Login() {
         <div className="flex items-center gap-2 select-none animate__animated animate__fadeIn">
           <img src="/logo.png" alt="CodeTasker" className="h-10 w-auto object-contain" />
         </div>
-        <div className="mt-4 flex gap-4 md:mt-0 animate__animated animate__fadeIn">
+        <div className="mt-4 flex items-center gap-3 md:mt-0 animate__animated animate__fadeIn">
+          <button
+            onClick={() => navigate('/cli')}
+            className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 px-3 py-1.5 rounded transition-all cursor-pointer font-mono"
+          >
+            <Terminal size={13} />
+            <span>CLI Tool</span>
+          </button>
           <a
             href="https://github.com/noirlang/codetasker"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white"
+            className="flex items-center gap-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white bg-[#141414] border border-[#262626] px-3 py-1.5 rounded"
           >
             <Github size={14} /> GitHub
           </a>

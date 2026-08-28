@@ -18,6 +18,7 @@ import {
   GitFork,
   Settings,
   BookOpen,
+  Terminal,
   LogOut,
   GitCommit,
   GitPullRequest,
@@ -959,6 +960,21 @@ export default function Dashboard() {
                 </span>
               </button>
             ))}
+
+            <div className="pt-2 mt-2 border-t border-[#1f1f1f]">
+              <button
+                onClick={() => navigate('/cli')}
+                className="relative flex items-center justify-between w-full px-4 py-2.5 rounded text-sm text-[#888888] hover:text-white hover:bg-white/[0.03] transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <Terminal size={15} className="text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span>CLI Tool</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                  v0.0.1
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -992,22 +1008,31 @@ export default function Dashboard() {
         <div className="flex items-center gap-2 select-none">
           <img src="/logo-kucuk.png" alt="CodeTasker" className="h-9 w-auto object-contain" />
         </div>
-        {user && (
-          <div className="flex items-center gap-3">
-            <img
-              src={user.avatar_url}
-              alt={user.username}
-              className="h-6 w-6 rounded-full border border-[#3a3a3a]"
-            />
-            <button
-              onClick={logout}
-              className="btn-secondary text-[10px] px-2 py-1 flex items-center gap-1"
-            >
-              <LogOut size={10} />
-              Logout
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/cli')}
+            className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded font-mono cursor-pointer"
+          >
+            <Terminal size={12} />
+            <span>CLI</span>
+          </button>
+          {user && (
+            <div className="flex items-center gap-3">
+              <img
+                src={user.avatar_url}
+                alt={user.username}
+                className="h-6 w-6 rounded-full border border-[#3a3a3a]"
+              />
+              <button
+                onClick={logout}
+                className="btn-secondary text-[10px] px-2 py-1 flex items-center gap-1"
+              >
+                <LogOut size={10} />
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       <nav className="flex md:hidden shrink-0 gap-1 overflow-x-auto border-b border-[#2a2a2a] bg-[#111111] px-3 py-2">
