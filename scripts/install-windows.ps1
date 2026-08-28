@@ -55,6 +55,6 @@ Write-Host ""
 Write-Host "✓ CodeTasker CLI successfully installed to: $TargetBin" -ForegroundColor Green
 Write-Host ""
 Write-Host "To verify and get started, run:"
-Write-Host "  codetasker --help   (View all available commands)"
-Write-Host "  codetasker scan .   (Scan local directory for TODO/FIXME)"
-Write-Host "  codetasker tui      (Launch interactive terminal dashboard)"
+Write-Host "  codetasker --help   (View all available commands)" -ForegroundColor White
+Write-Host "  codetasker scan .   (Scan local directory for TODO/FIXME)" -ForegroundColor White
+Write-Host "  codetasker repo list (List connected repositories)" -ForegroundColor White

@@ -74,4 +74,4 @@ fi
 echo -e "To verify and get started, run:"
 echo -e "  ${BOLD}codetasker --help${NC}   (View all available commands)"
 echo -e "  ${BOLD}codetasker scan .${NC}   (Scan local directory for TODO/FIXME)"
-echo -e "  ${BOLD}codetasker tui${NC}      (Launch interactive terminal dashboard)"
+echo -e "  ${BOLD}codetasker repo list${NC} (List connected repositories)"

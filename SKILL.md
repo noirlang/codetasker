@@ -1,11 +1,11 @@
 ---
 name: codetasker
-description: CodeTasker CLI ve TUI kullanım rehberi. Kod tabanı TODO/FIXME tarama, repo senkronizasyonu, görev yönetimi, terminalden task enjekte edip PR açma ve teknik borç analizi iş akışlarını açıklar.
+description: CodeTasker CLI kullanım rehberi. Kod tabanı TODO/FIXME tarama, repo senkronizasyonu, görev yönetimi, terminalden task enjekte edip PR açma ve teknik borç analizi iş akışlarını açıklar.
 ---
 
-# CodeTasker CLI & TUI Skill
+# CodeTasker CLI Skill
 
-CodeTasker, kod tabanındaki teknik borçları (`TODO`, `FIXME`, `BUG`, `HACK`, `NOTE`) otomatik tespit eden, GitHub PR'ları ile koda görev enjekte edebilen ve teknik borç maliyet analizi sunan bir sistemdir. Bu beceri (skill), CodeTasker CLI ve interaktif terminal arayüzünün (TUI) kullanımını kapsar.
+CodeTasker, kod tabanındaki teknik borçları (`TODO`, `FIXME`, `BUG`, `HACK`, `NOTE`) otomatik tespit eden, GitHub PR'ları ile koda görev enjekte edebilen ve teknik borç maliyet analizi sunan bir sistemdir. Bu beceri (skill), CodeTasker CLI komutlarının kullanımını kapsar.
 
 ---
 
@@ -25,35 +25,10 @@ CodeTasker, kod tabanındaki teknik borçları (`TODO`, `FIXME`, `BUG`, `HACK`, 
 
 ---
 
-## 🖥️ İnteraktif Terminal Arayüzü (TUI)
-
-Doğrudan `codetasker` veya `codetasker tui` çalıştırıldığında tam ekran reaktif arayüz açılır:
-
-```bash
-codetasker
-# veya
-codetasker tui
-```
-
-### Kısayol Tuşları:
-- **`Tab` veya `1..4`**: Sekmeler arası geçiş:
-  - `[1]` Tasks (Görev Listesi / Kanban)
-  - `[2]` Files (Dosya Gezgini & Kod)
-  - `[3]` Technical Debt (Teknik Borç Dashboard'u)
-  - `[4]` Notifications (Bildirimler)
-- **`j / k` veya `↓ / ↑`**: Görevler arasında yukarı/aşağı gezinme.
-- **`Space`**: Seçili görevin durumunu değiştirme (`OPEN` ➔ `IN PROGRESS` ➔ `RESOLVED`).
-- **`i`**: İnteraktif Task Injector formunu açar (Dosya yolu, Satır no, Tip, Açıklama girip PR açma).
-- **`s`**: Aktif repoyu otomatik tarar ve senkronize eder.
-- **`r`**: Verileri yeniler.
-- **`q` veya `Ctrl+C`**: Çıkış.
-
----
-
 ## ⚙️ CLI Komutları Referansı
 
 ### 1. Kod Tabanı Tarama (`scan` - Offline & Yerel)
-Veritabanı veya sunucu gerektirmeden yerel projedeki tüm anotasyonları listeler:
+Veritabanı veya sunucu gerektirmeden yerel projedeki tüm anotasyonları renkli tablolarla listeler:
 ```bash
 codetasker scan .
 codetasker scan . --type FIXME
@@ -112,7 +87,7 @@ codetasker notify read-all
 
 ### 6. Kimlik Doğrulama & Ayarlar (`auth` / `config`)
 ```bash
-codetasker auth login --token "<token>" --server "http://localhost:8080"
+codetasker auth login --token "<token>" --server "https://codetasker.noirlang.tr"
 codetasker auth status
 
 codetasker config set default_repo "owner/repo"

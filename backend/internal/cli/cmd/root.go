@@ -19,12 +19,20 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "codetasker",
 	Short: "CodeTasker — Technical Debt & Code Annotation Management CLI",
-	Long: ui.Banner() + `
-CodeTasker CLI brings complete automated technical debt management,
+	Long: `CodeTasker CLI brings complete automated technical debt management,
 TODO/FIXME annotation tracking, and GitHub pull request injection directly to your terminal.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Do not print banner when json output is requested or during completion
+		if cmd.Name() == "completion" || cmd.Name() == "__complete" {
+			return
+		}
+		if jsonFlag, err := cmd.Flags().GetBool("json"); err == nil && jsonFlag {
+			return
+		}
+		fmt.Println(ui.Banner())
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Default action without subcommands: Launch interactive TUI
-		return runTUI(cmd, args)
+		return cmd.Help()
 	},
 }
 
@@ -43,7 +51,6 @@ func init() {
 	RootCmd.AddCommand(taskCmd)
 	RootCmd.AddCommand(debtCmd)
 	RootCmd.AddCommand(notifyCmd)
-	RootCmd.AddCommand(tuiCmd)
 }
 
 func initConfig() {
