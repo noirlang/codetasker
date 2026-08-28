@@ -67,25 +67,25 @@ export default function CLI() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col selection:bg-emerald-500/20 selection:text-emerald-400">
+    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col selection:bg-white/20 selection:text-white">
       {/* ── Top Header ──────────────────────────────────────────────────────── */}
-      <header className="border-b border-[#222222] bg-[#111111]/80 backdrop-blur-md sticky top-0 z-50">
+      <header className="border-b border-[#222222] bg-[#111111]/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate(isAuthenticated ? '/dashboard' : '/login')}
-              className="flex items-center gap-2 text-sm text-[#888888] hover:text-white transition-colors cursor-pointer"
+              className="flex items-center gap-2 text-xs text-[#888888] hover:text-white transition-colors cursor-pointer"
             >
-              <ArrowLeft size={16} />
+              <ArrowLeft size={15} />
               <span>{isAuthenticated ? 'Dashboard' : 'Login'}</span>
             </button>
             <div className="h-4 w-px bg-[#333333]" />
             <div className="flex items-center gap-2.5">
               <img src="/logo-kucuk.png" alt="CodeTasker" className="h-6 w-auto object-contain" />
               <span className="font-mono text-sm tracking-wider font-semibold text-white">
-                CODETASKER <span className="text-emerald-400 font-normal">CLI</span>
+                CODETASKER <span className="text-[#a0a0a0] font-normal">CLI</span>
               </span>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/5 text-white/90 border border-white/10 font-medium">
                 v0.0.1
               </span>
             </div>
@@ -96,7 +96,7 @@ export default function CLI() {
               href="https://github.com/noirlang/codetasker"
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1.5 text-xs text-[#888888] hover:text-white bg-[#1a1a1a] hover:bg-[#252525] border border-[#333333] px-3 py-1.5 rounded transition-all"
+              className="flex items-center gap-1.5 text-xs text-[#a0a0a0] hover:text-white bg-[#161616] hover:bg-[#202020] border border-[#2a2a2a] px-3 py-1.5 rounded transition-all"
             >
               <ExternalLink size={13} />
               <span>GitHub</span>
@@ -104,9 +104,9 @@ export default function CLI() {
             {isAuthenticated && (
               <button
                 onClick={() => navigate('/dashboard')}
-                className="text-xs bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-3 py-1.5 rounded transition-all cursor-pointer"
+                className="text-xs bg-white hover:bg-white/90 text-black font-semibold px-3 py-1.5 rounded transition-all cursor-pointer"
               >
-                Go to Dashboard
+                Dashboard
               </button>
             )}
           </div>
@@ -117,13 +117,13 @@ export default function CLI() {
       <main className="flex-1 max-w-5xl mx-auto px-6 py-12 w-full">
         {/* ── Hero ──────────────────────────────────────────────────────────── */}
         <div className="text-center max-w-3xl mx-auto mb-12">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#181818] border border-[#2a2a2a] text-xs text-[#a0a0a0] mb-5 font-mono">
-            <Terminal size={14} className="text-emerald-400" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-[#a0a0a0] mb-5 font-mono">
+            <Terminal size={14} className="text-white" />
             <span>Standalone Binary &bull; Linux &bull; macOS &bull; Windows</span>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white mb-4">
             Automated Code Debt Management <br />
-            <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-white via-white/80 to-white/40 bg-clip-text text-transparent">
               Right from your Terminal.
             </span>
           </h1>
@@ -136,7 +136,7 @@ export default function CLI() {
         <div className="rounded-xl border border-[#262626] bg-[#121212] overflow-hidden shadow-2xl mb-16">
           <div className="border-b border-[#222222] bg-[#161616] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Download size={16} className="text-emerald-400" />
+              <Download size={16} className="text-white" />
               <span className="text-xs font-semibold uppercase tracking-wider text-[#d0d0d0]">
                 One-Line Installation
               </span>
@@ -148,7 +148,7 @@ export default function CLI() {
                 onClick={() => setActiveOS('linux')}
                 className={`px-3 py-1 text-xs rounded font-medium transition-all cursor-pointer ${
                   activeOS === 'linux'
-                    ? 'bg-[#252525] text-white shadow-sm'
+                    ? 'bg-[#222222] text-white shadow-sm border border-[#333333]'
                     : 'text-[#666666] hover:text-[#aaaaaa]'
                 }`}
               >
@@ -158,7 +158,7 @@ export default function CLI() {
                 onClick={() => setActiveOS('windows')}
                 className={`px-3 py-1 text-xs rounded font-medium transition-all cursor-pointer ${
                   activeOS === 'windows'
-                    ? 'bg-[#252525] text-white shadow-sm'
+                    ? 'bg-[#222222] text-white shadow-sm border border-[#333333]'
                     : 'text-[#666666] hover:text-[#aaaaaa]'
                 }`}
               >
@@ -171,11 +171,11 @@ export default function CLI() {
             {activeOS === 'linux' && (
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-xs text-[#777777]">Download method:</span>
-                <div className="inline-flex rounded border border-[#262626] bg-[#0d0d0d] p-0.5 text-xs">
+                <div className="inline-flex rounded border border-[#262626] bg-[#0d0d0d] p-0.5 text-xs font-mono">
                   <button
                     onClick={() => setActiveTool('curl')}
                     className={`px-2.5 py-0.5 rounded cursor-pointer transition-colors ${
-                      activeTool === 'curl' ? 'bg-[#222] text-emerald-400 font-mono' : 'text-[#666]'
+                      activeTool === 'curl' ? 'bg-[#222] text-white font-medium' : 'text-[#666]'
                     }`}
                   >
                     curl
@@ -183,7 +183,7 @@ export default function CLI() {
                   <button
                     onClick={() => setActiveTool('wget')}
                     className={`px-2.5 py-0.5 rounded cursor-pointer transition-colors ${
-                      activeTool === 'wget' ? 'bg-[#222] text-emerald-400 font-mono' : 'text-[#666]'
+                      activeTool === 'wget' ? 'bg-[#222] text-white font-medium' : 'text-[#666]'
                     }`}
                   >
                     wget
@@ -193,8 +193,8 @@ export default function CLI() {
             )}
 
             {/* Terminal Command Box */}
-            <div className="relative group bg-[#0a0a0a] rounded-lg border border-[#202020] p-4 font-mono text-sm flex items-center justify-between gap-4 overflow-x-auto">
-              <div className="flex items-center gap-3 overflow-x-auto text-emerald-300">
+            <div className="relative group bg-[#0a0a0a] rounded-lg border border-[#222222] p-4 font-mono text-sm flex items-center justify-between gap-4 overflow-x-auto">
+              <div className="flex items-center gap-3 overflow-x-auto text-[#f0f0f0]">
                 <span className="text-[#555555] select-none">$</span>
                 <span className="select-all text-sm whitespace-nowrap">{getActiveInstallCommand()}</span>
               </div>
@@ -204,8 +204,8 @@ export default function CLI() {
               >
                 {copiedKey === 'install' ? (
                   <>
-                    <Check size={14} className="text-emerald-400" />
-                    <span className="text-emerald-400 font-medium">Copied!</span>
+                    <Check size={14} className="text-white" />
+                    <span className="text-white font-medium">Copied!</span>
                   </>
                 ) : (
                   <>
@@ -217,9 +217,9 @@ export default function CLI() {
             </div>
 
             <p className="text-xs text-[#666666] mt-3 flex items-center gap-1.5">
-              <Shield size={13} className="text-emerald-500" />
+              <Shield size={13} className="text-[#888888]" />
               Builds a standalone binary directly from verified open-source repo into{' '}
-              <code className="text-[#999999] bg-[#1a1a1a] px-1.5 py-0.5 rounded font-mono">
+              <code className="text-[#a0a0a0] bg-[#1a1a1a] px-1.5 py-0.5 rounded font-mono">
                 {activeOS === 'windows' ? '%LOCALAPPDATA%\\CodeTasker\\bin' : '~/.local/bin/codetasker'}
               </code>
             </p>
@@ -229,25 +229,25 @@ export default function CLI() {
         {/* ── Quick Command Reference ───────────────────────────────────────── */}
         <div className="mb-16">
           <div className="flex items-center gap-2 mb-6">
-            <Code2 size={20} className="text-emerald-400" />
-            <h2 className="text-xl font-bold text-white tracking-tight">Quick Command Reference</h2>
+            <Code2 size={18} className="text-white" />
+            <h2 className="text-xl font-bold text-white tracking-tight font-sans">Quick Command Reference</h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-3">
             {quickCommands.map((item, idx) => (
               <div
                 key={idx}
-                className="rounded-lg border border-[#222222] bg-[#131313] hover:border-[#333333] transition-all p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                className="rounded-lg border border-[#222222] bg-[#131313] hover:border-[#333333] transition-all p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
               >
                 <div className="max-w-md">
-                  <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <h3 className="text-sm font-semibold text-white mb-0.5 flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white/70" />
                     {item.title}
                   </h3>
-                  <p className="text-xs text-[#888888]">{item.desc}</p>
+                  <p className="text-xs text-[#777777]">{item.desc}</p>
                 </div>
 
-                <div className="flex items-center gap-2 bg-[#090909] px-3.5 py-2 rounded-md border border-[#1f1f1f] font-mono text-xs text-[#dcdcdc] max-w-full overflow-x-auto justify-between md:min-w-[420px]">
+                <div className="flex items-center gap-2 bg-[#090909] px-3 py-2 rounded border border-[#1f1f1f] font-mono text-xs text-[#dcdcdc] max-w-full overflow-x-auto justify-between md:min-w-[420px]">
                   <span className="truncate">{item.cmd}</span>
                   <button
                     onClick={() => copyToClipboard(item.cmd, `cmd-${idx}`)}
@@ -255,7 +255,7 @@ export default function CLI() {
                     title="Copy command"
                   >
                     {copiedKey === `cmd-${idx}` ? (
-                      <Check size={14} className="text-emerald-400" />
+                      <Check size={14} className="text-white" />
                     ) : (
                       <Copy size={14} />
                     )}
@@ -269,8 +269,8 @@ export default function CLI() {
         {/* ── Feature Highlights ────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           <div className="rounded-xl border border-[#222222] bg-[#111111] p-6">
-            <div className="h-10 w-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
-              <Search size={20} />
+            <div className="h-10 w-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white mb-4">
+              <Search size={18} />
             </div>
             <h3 className="text-sm font-semibold text-white mb-2">Offline TODO Scanner</h3>
             <p className="text-xs text-[#888888] leading-relaxed">
@@ -279,8 +279,8 @@ export default function CLI() {
           </div>
 
           <div className="rounded-xl border border-[#222222] bg-[#111111] p-6">
-            <div className="h-10 w-10 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 mb-4">
-              <GitPullRequest size={20} />
+            <div className="h-10 w-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white mb-4">
+              <GitPullRequest size={18} />
             </div>
             <h3 className="text-sm font-semibold text-white mb-2">Automated PR Injection</h3>
             <p className="text-xs text-[#888888] leading-relaxed">
@@ -289,8 +289,8 @@ export default function CLI() {
           </div>
 
           <div className="rounded-xl border border-[#222222] bg-[#111111] p-6">
-            <div className="h-10 w-10 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-4">
-              <Key size={20} />
+            <div className="h-10 w-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white mb-4">
+              <Key size={18} />
             </div>
             <h3 className="text-sm font-semibold text-white mb-2">App Token Authentication</h3>
             <p className="text-xs text-[#888888] leading-relaxed">
@@ -301,26 +301,19 @@ export default function CLI() {
       </main>
 
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-[#1a1a1a] bg-[#0c0c0c] py-8 text-center text-xs text-[#555555]">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <span>&copy; {new Date().getFullYear()} CodeTasker &bull; Open Source Technical Debt Automation</span>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/cli')}
-              className="text-[#888888] hover:text-white transition-colors cursor-pointer"
-            >
-              CLI Documentation
-            </button>
-            <a
-              href="https://github.com/noirlang/codetasker"
-              target="_blank"
-              rel="noreferrer"
-              className="text-[#888888] hover:text-white transition-colors"
-            >
-              GitHub Repository
-            </a>
-          </div>
-        </div>
+      <footer className="relative z-10 border-t border-[#2a2a2a] py-8 text-center text-xs text-[#666666] bg-[#0c0c0c]">
+        <p>
+          &copy; {new Date().getFullYear()}{' '}
+          <a
+            href="https://noirlang.tr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-white transition-colors text-[#a0a0a0] font-medium"
+          >
+            noirLang
+          </a>
+          . Sync your TODOs. Ship faster.
+        </p>
       </footer>
     </div>
   );

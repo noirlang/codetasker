@@ -13,9 +13,9 @@ Write-Host "
 ⠈⠻⣦⡀   ⣿  ⠘⣧       ⢸⡇   ⢀⣴⠟⠉
   ⠈⠻⣦⡀⢰⡇   ⠹⣆   ⢀⡇ ⢸⡇ ⢀⣴⠟⠁
     ⠈⠁⢼⠁    ⠈⠓⠒⠒⠉⠁ ⠛⠃ ⠈⠁
-" -ForegroundColor Green
+" -ForegroundColor White
 
-Write-Host "Building and installing CodeTasker CLI for Windows..." -ForegroundColor Cyan
+Write-Host "Building and installing CodeTasker CLI for Windows..." -ForegroundColor White
 
 # Check Go
 if (-not (Get-Command "go" -ErrorAction SilentlyContinue)) {
@@ -52,7 +52,7 @@ if ($UserPath -notlike "*$InstallDir*") {
 }
 
 Write-Host ""
-Write-Host "✓ CodeTasker CLI successfully installed to: $TargetBin" -ForegroundColor Green
+Write-Host "✓ CodeTasker CLI successfully installed to: $TargetBin" -ForegroundColor White
 Write-Host ""
 Write-Host "To verify and get started, run:"
 Write-Host "  codetasker --help   (View all available commands)" -ForegroundColor White

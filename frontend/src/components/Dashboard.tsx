@@ -967,10 +967,10 @@ export default function Dashboard() {
                 className="relative flex items-center justify-between w-full px-4 py-2.5 rounded text-sm text-[#888888] hover:text-white hover:bg-white/[0.03] transition-all cursor-pointer group"
               >
                 <div className="flex items-center gap-3">
-                  <Terminal size={15} className="text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <Terminal size={15} className="text-[#a0a0a0] group-hover:text-white transition-colors" />
                   <span>CLI Tool</span>
                 </div>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-white/80 border border-white/10 font-medium">
                   v0.0.1
                 </span>
               </button>
@@ -1011,7 +1011,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/cli')}
-            className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded font-mono cursor-pointer"
+            className="flex items-center gap-1 text-xs text-white bg-white/5 border border-white/10 px-2.5 py-1 rounded font-mono cursor-pointer"
           >
             <Terminal size={12} />
             <span>CLI</span>

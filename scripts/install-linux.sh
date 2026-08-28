@@ -5,14 +5,14 @@
 
 set -e
 
-GREEN='\033[0;32m'
+WHITE='\033[1;37m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}${BOLD}"
+echo -e "${WHITE}${BOLD}"
 cat << "EOF"
          ⣶  ⣠⠖⠉⠙⢶⢰⠏⢹⡏⢳
         ⢠⡏ ⣼⠃   ⠘  ⢸⡇⠈
@@ -62,7 +62,7 @@ fi
 
 rm -f "$TEMP_BIN"
 
-echo -e "\n${GREEN}✓ CodeTasker CLI successfully installed!${NC}\n"
+echo -e "\n${WHITE}${BOLD}✓ CodeTasker CLI successfully installed!${NC}\n"
 
 # Verify PATH
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then

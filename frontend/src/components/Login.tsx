@@ -135,7 +135,7 @@ export default function Login() {
         <div className="mt-4 flex items-center gap-3 md:mt-0 animate__animated animate__fadeIn">
           <button
             onClick={() => navigate('/cli')}
-            className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 px-3 py-1.5 rounded transition-all cursor-pointer font-mono"
+            className="flex items-center gap-1.5 text-xs text-white bg-white/5 border border-white/10 hover:bg-white/10 px-3 py-1.5 rounded transition-all cursor-pointer font-mono"
           >
             <Terminal size={13} />
             <span>CLI Tool</span>

@@ -27,7 +27,7 @@ var (
 
 	HeaderStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(Emerald).
+			Foreground(lipgloss.Color("#ffffff")).
 			MarginBottom(1)
 
 	SubtleStyle = lipgloss.NewStyle().
@@ -39,7 +39,7 @@ var (
 
 	SuccessStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(Emerald)
+			Foreground(lipgloss.Color("#ffffff"))
 
 	ErrorStyle = lipgloss.NewStyle().
 			Bold(true).
@@ -140,7 +140,7 @@ func Banner() string {
     ⠈⠁⢼⠁    ⠈⠓⠒⠒⠉⠁ ⠛⠃ ⠈⠁
 `
 	return lipgloss.NewStyle().
-		Foreground(Emerald).
+		Foreground(lipgloss.Color("#ffffff")).
 		Bold(true).
 		Render(logo)
 }
