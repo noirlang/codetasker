@@ -297,20 +297,20 @@ var taskCommentListCmd = &cobra.Command{
 func init() {
 	taskListCmd.Flags().Int64("repo-id", 0, "GitHub repository ID")
 	taskListCmd.Flags().StringP("repo", "r", "", "Repository name (owner/repo)")
-	taskListCmd.Flags().StringP("status", "s", "", "Filter by status (open, in_progress, resolved)")
-	taskListCmd.Flags().StringP("type", "t", "", "Filter by type (TODO, FIXME, BUG, HACK, NOTE)")
+	taskListCmd.Flags().String("status", "", "Filter by status (open, in_progress, resolved)")
+	taskListCmd.Flags().String("type", "", "Filter by type (TODO, FIXME, BUG, HACK, NOTE)")
 	taskListCmd.Flags().Bool("json", false, "Output results in JSON format")
 
 	taskInjectCmd.Flags().StringP("repo", "r", "", "Target repository (owner/repo)")
 	taskInjectCmd.Flags().StringP("file", "f", "", "Target file path (e.g. src/auth.go)")
 	taskInjectCmd.Flags().IntP("line", "l", 1, "Line number for injection")
-	taskInjectCmd.Flags().StringP("type", "t", "TODO", "Annotation type (TODO, FIXME, BUG, HACK, NOTE)")
+	taskInjectCmd.Flags().String("type", "TODO", "Annotation type (TODO, FIXME, BUG, HACK, NOTE)")
 	taskInjectCmd.Flags().StringP("note", "n", "", "Task description / note text")
 	taskInjectCmd.Flags().StringP("branch", "b", "", "Git branch to create PR against")
 	taskInjectCmd.Flags().Bool("new-file", false, "Create as a brand new file")
 	taskInjectCmd.Flags().String("issue-url", "", "Link to an existing GitHub Issue URL")
 
-	taskUpdateCmd.Flags().StringP("status", "s", "", "New task status (open, in_progress, resolved)")
+	taskUpdateCmd.Flags().String("status", "", "New task status (open, in_progress, resolved)")
 	taskUpdateCmd.Flags().StringP("assign", "a", "", "Assign to GitHub username (empty to unassign)")
 
 	taskCommentCmd.AddCommand(taskCommentAddCmd)

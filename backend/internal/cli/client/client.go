@@ -192,6 +192,15 @@ func (c *Client) GetRepoTree(ctx context.Context, owner, repo, branch string) ([
 	if branch != "" {
 		endpoint += "?branch=" + url.QueryEscape(branch)
 	}
+
+	var wrapper struct {
+		Entries []FileTreeNode `json:"entries"`
+		Count   int            `json:"count"`
+	}
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &wrapper); err == nil {
+		return wrapper.Entries, nil
+	}
+
 	var tree []FileTreeNode
 	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &tree); err != nil {
 		return nil, err
@@ -201,6 +210,15 @@ func (c *Client) GetRepoTree(ctx context.Context, owner, repo, branch string) ([
 
 func (c *Client) GetRepoCollaborators(ctx context.Context, owner, repo string) ([]domain.Collaborator, error) {
 	endpoint := fmt.Sprintf("/repos/%s/%s/collaborators", url.PathEscape(owner), url.PathEscape(repo))
+
+	var wrapper struct {
+		Collaborators []domain.Collaborator `json:"collaborators"`
+		Count         int                   `json:"count"`
+	}
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &wrapper); err == nil {
+		return wrapper.Collaborators, nil
+	}
+
 	var collabs []domain.Collaborator
 	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &collabs); err != nil {
 		return nil, err
@@ -211,10 +229,17 @@ func (c *Client) GetRepoCollaborators(ctx context.Context, owner, repo string) (
 func (c *Client) SyncRepo(ctx context.Context, owner, repo string) (*SyncResponse, error) {
 	endpoint := fmt.Sprintf("/repos/%s/%s/sync", url.PathEscape(owner), url.PathEscape(repo))
 	var syncResp SyncResponse
-	if err := c.doRequest(ctx, http.MethodPost, endpoint, nil, &syncResp); err != nil {
+	if err := c.doRequest(ctx, http.MethodPost, endpoint, nil, &syncResp); err == nil && syncResp.RepoName != "" {
+		return &syncResp, nil
+	}
+
+	var rawMap map[string]interface{}
+	if err := c.doRequest(ctx, http.MethodPost, endpoint, nil, &rawMap); err != nil {
 		return nil, err
 	}
-	return &syncResp, nil
+	return &SyncResponse{
+		RepoName: owner + "/" + repo,
+	}, nil
 }
 
 // ── Task Endpoints ───────────────────────────────────────────────────────────
