@@ -88,7 +88,15 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body in
 		bodyReader = bytes.NewReader(data)
 	}
 
-	reqURL := fmt.Sprintf("%s%s", c.BaseURL, endpoint)
+	cleanBase := strings.TrimRight(c.BaseURL, "/")
+	cleanEndpoint := "/" + strings.TrimLeft(endpoint, "/")
+	if !strings.HasPrefix(cleanEndpoint, "/api/") && cleanEndpoint != "/api" {
+		if !strings.HasSuffix(cleanBase, "/api") {
+			cleanEndpoint = "/api" + cleanEndpoint
+		}
+	}
+	reqURL := cleanBase + cleanEndpoint
+
 	req, err := http.NewRequestWithContext(ctx, method, reqURL, bodyReader)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
@@ -105,13 +113,25 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body in
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("network request failed (is backend running at %s?): %w", c.BaseURL, err)
+		return fmt.Errorf("cannot connect to server at %s. Is CodeTasker backend running? (Error: %w)", cleanBase, err)
 	}
 	defer resp.Body.Close()
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("read response body: %w", err)
+	}
+
+	trimmedResp := strings.TrimSpace(string(respBytes))
+
+	// Check if the server returned an HTML fallback page (e.g. 404 handler or web SPA)
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "text/html") || strings.HasPrefix(trimmedResp, "<!DOCTYPE") || strings.HasPrefix(trimmedResp, "<html") {
+		return fmt.Errorf("server at %s returned an HTML web page instead of JSON API response. Verify backend is running on this port and endpoint '%s' exists", cleanBase, cleanEndpoint)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("authentication failed (%d). Please log in with 'codetasker auth login' or specify a valid token", resp.StatusCode)
 	}
 
 	if resp.StatusCode >= 400 {
@@ -128,12 +148,12 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body in
 				return fmt.Errorf("API error (%d): %s", resp.StatusCode, msg)
 			}
 		}
-		return fmt.Errorf("API error (%d): %s", resp.StatusCode, string(respBytes))
+		return fmt.Errorf("API error (%d): %s", resp.StatusCode, trimmedResp)
 	}
 
 	if result != nil && len(respBytes) > 0 {
 		if err := json.Unmarshal(respBytes, result); err != nil {
-			return fmt.Errorf("unmarshal response (%s): %w", string(respBytes), err)
+			return fmt.Errorf("unmarshal response (%s): %w", trimmedResp, err)
 		}
 	}
 

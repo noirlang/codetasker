@@ -70,22 +70,30 @@ func ConfigPath() (string, error) {
 
 // Load reads and parses the configuration file. If it doesn't exist, returns default config.
 func Load() (*Config, error) {
-	cfgPath, err := ConfigPath()
-	if err != nil {
-		return DefaultConfig(), nil
-	}
-
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return DefaultConfig(), nil
-		}
-		return nil, fmt.Errorf("read config file: %w", err)
-	}
-
 	cfg := DefaultConfig()
-	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("parse config file: %w", err)
+
+	cfgPath, err := ConfigPath()
+	if err == nil {
+		if data, err := os.ReadFile(cfgPath); err == nil {
+			_ = json.Unmarshal(data, cfg)
+		}
+	}
+
+	// Environment variable overrides
+	if envServer := os.Getenv("CODETASKER_SERVER"); envServer != "" {
+		cfg.ServerURL = envServer
+	} else if envServerURL := os.Getenv("CODETASKER_SERVER_URL"); envServerURL != "" {
+		cfg.ServerURL = envServerURL
+	}
+
+	if envToken := os.Getenv("CODETASKER_TOKEN"); envToken != "" {
+		cfg.Token = envToken
+	} else if envAuthToken := os.Getenv("CODETASKER_AUTH_TOKEN"); envAuthToken != "" {
+		cfg.Token = envAuthToken
+	}
+
+	if envRepo := os.Getenv("CODETASKER_REPO"); envRepo != "" {
+		cfg.DefaultRepo = envRepo
 	}
 
 	return cfg, nil
