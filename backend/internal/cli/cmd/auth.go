@@ -56,7 +56,11 @@ var authLoginCmd = &cobra.Command{
 			return fmt.Errorf("token cannot be empty")
 		}
 
-		cfg.Token = token
+		// Sanitize server URL and token against stray newlines or whitespace from terminal wraps
+		cfg.ServerURL = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(cfg.ServerURL, "\n", ""), "\r", ""))
+		cfg.ServerURL = strings.ReplaceAll(cfg.ServerURL, " ", "")
+		cfg.Token = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(token, "\n", ""), "\r", ""))
+		cfg.Token = strings.ReplaceAll(cfg.Token, " ", "")
 
 		// Validate token with server
 		api := client.NewClient(cfg)

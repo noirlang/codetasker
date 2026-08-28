@@ -124,7 +124,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body in
 
 	trimmedResp := strings.TrimSpace(string(respBytes))
 
-	// Check if the server returned an HTML fallback page (e.g. 404 handler or web SPA)
+	// Check if the server returned an HTML fallback page
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(contentType, "text/html") || strings.HasPrefix(trimmedResp, "<!DOCTYPE") || strings.HasPrefix(trimmedResp, "<html") {
 		return fmt.Errorf("server at %s returned an HTML web page instead of JSON API response. Verify backend is running on this port and endpoint '%s' exists", cleanBase, cleanEndpoint)
@@ -175,6 +175,13 @@ func (c *Client) GetMe(ctx context.Context) (*domain.User, error) {
 func (c *Client) ListRepos(ctx context.Context) ([]RepositoryInfo, error) {
 	var repos []RepositoryInfo
 	if err := c.doRequest(ctx, http.MethodGet, "/repos", nil, &repos); err != nil {
+		// Try wrapper { "repos": [...] }
+		var wrapper struct {
+			Repos []RepositoryInfo `json:"repos"`
+		}
+		if err2 := c.doRequest(ctx, http.MethodGet, "/repos", nil, &wrapper); err2 == nil && len(wrapper.Repos) > 0 {
+			return wrapper.Repos, nil
+		}
 		return nil, err
 	}
 	return repos, nil
@@ -213,23 +220,28 @@ func (c *Client) SyncRepo(ctx context.Context, owner, repo string) (*SyncRespons
 // ── Task Endpoints ───────────────────────────────────────────────────────────
 
 func (c *Client) ListTasks(ctx context.Context, repoID int64, status, taskType string) ([]domain.Task, error) {
-	endpoint := fmt.Sprintf("/repos/%d/tasks", repoID)
-	params := url.Values{}
+	endpoint := fmt.Sprintf("/tasks?repo_id=%d", repoID)
 	if status != "" {
-		params.Set("status", status)
+		endpoint += "&status=" + url.QueryEscape(status)
 	}
 	if taskType != "" {
-		params.Set("type", taskType)
-	}
-	if len(params) > 0 {
-		endpoint += "?" + params.Encode()
+		endpoint += "&type=" + url.QueryEscape(taskType)
 	}
 
-	var tasks []domain.Task
-	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &tasks); err != nil {
+	var wrapper struct {
+		Tasks []domain.Task `json:"tasks"`
+		Count int           `json:"count"`
+	}
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &wrapper); err == nil {
+		return wrapper.Tasks, nil
+	}
+
+	// Fallback to direct array if returned
+	var directTasks []domain.Task
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &directTasks); err != nil {
 		return nil, err
 	}
-	return tasks, nil
+	return directTasks, nil
 }
 
 func (c *Client) InjectTask(ctx context.Context, req domain.InjectTaskRequest) (*InjectResponse, error) {
@@ -241,24 +253,32 @@ func (c *Client) InjectTask(ctx context.Context, req domain.InjectTaskRequest) (
 }
 
 func (c *Client) UpdateTaskStatus(ctx context.Context, taskID string, status domain.TaskStatus) error {
-	endpoint := fmt.Sprintf("/tasks/%s/status", url.PathEscape(taskID))
+	endpoint := fmt.Sprintf("/tasks/%s", url.PathEscape(taskID))
 	body := map[string]string{"status": string(status)}
 	return c.doRequest(ctx, http.MethodPatch, endpoint, body, nil)
 }
 
 func (c *Client) UpdateTaskAssignee(ctx context.Context, taskID, username string) error {
-	endpoint := fmt.Sprintf("/tasks/%s/assignee", url.PathEscape(taskID))
-	body := map[string]string{"username": username}
+	endpoint := fmt.Sprintf("/tasks/%s", url.PathEscape(taskID))
+	body := map[string]string{"assignee_username": username}
 	return c.doRequest(ctx, http.MethodPatch, endpoint, body, nil)
 }
 
 func (c *Client) ListComments(ctx context.Context, taskID string) ([]domain.Comment, error) {
 	endpoint := fmt.Sprintf("/tasks/%s/comments", url.PathEscape(taskID))
-	var comments []domain.Comment
-	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &comments); err != nil {
+	var wrapper struct {
+		Comments []domain.Comment `json:"comments"`
+		Count    int              `json:"count"`
+	}
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &wrapper); err == nil {
+		return wrapper.Comments, nil
+	}
+
+	var direct []domain.Comment
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &direct); err != nil {
 		return nil, err
 	}
-	return comments, nil
+	return direct, nil
 }
 
 func (c *Client) AddComment(ctx context.Context, taskID, content string) (*domain.Comment, error) {
@@ -273,11 +293,19 @@ func (c *Client) AddComment(ctx context.Context, taskID, content string) (*domai
 
 func (c *Client) ListProposals(ctx context.Context, taskID string) ([]domain.TaskProposal, error) {
 	endpoint := fmt.Sprintf("/tasks/%s/proposals", url.PathEscape(taskID))
-	var proposals []domain.TaskProposal
-	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &proposals); err != nil {
+	var wrapper struct {
+		Proposals []domain.TaskProposal `json:"proposals"`
+		Count     int                   `json:"count"`
+	}
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &wrapper); err == nil {
+		return wrapper.Proposals, nil
+	}
+
+	var direct []domain.TaskProposal
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &direct); err != nil {
 		return nil, err
 	}
-	return proposals, nil
+	return direct, nil
 }
 
 func (c *Client) AddProposal(ctx context.Context, taskID, title, content string) (*domain.TaskProposal, error) {
@@ -291,7 +319,7 @@ func (c *Client) AddProposal(ctx context.Context, taskID, title, content string)
 }
 
 func (c *Client) VoteProposal(ctx context.Context, taskID, proposalID string, status domain.ProposalStatus) error {
-	endpoint := fmt.Sprintf("/tasks/%s/proposals/%s/status", url.PathEscape(taskID), url.PathEscape(proposalID))
+	endpoint := fmt.Sprintf("/tasks/%s/proposals/%s", url.PathEscape(taskID), url.PathEscape(proposalID))
 	body := map[string]string{"status": string(status)}
 	return c.doRequest(ctx, http.MethodPatch, endpoint, body, nil)
 }
@@ -314,11 +342,20 @@ func (c *Client) ListNotifications(ctx context.Context, unreadOnly bool) ([]doma
 	if unreadOnly {
 		endpoint += "?unread=true"
 	}
-	var notifications []domain.Notification
-	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &notifications); err != nil {
+
+	var wrapper struct {
+		Notifications []domain.Notification `json:"notifications"`
+		Count         int                   `json:"count"`
+	}
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &wrapper); err == nil {
+		return wrapper.Notifications, nil
+	}
+
+	var direct []domain.Notification
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &direct); err != nil {
 		return nil, err
 	}
-	return notifications, nil
+	return direct, nil
 }
 
 func (c *Client) MarkNotificationRead(ctx context.Context, id string) error {
