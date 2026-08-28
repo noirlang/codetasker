@@ -62,15 +62,28 @@ var authLoginCmd = &cobra.Command{
 		cfg.Token = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(token, "\n", ""), "\r", ""))
 		cfg.Token = strings.ReplaceAll(cfg.Token, " ", "")
 
+		// Handle accidental duplicate paste of App Token (e.g. ct_app_...ct_app_...)
+		if strings.HasPrefix(cfg.Token, "ct_app_") && len(cfg.Token) >= 71 {
+			cfg.Token = cfg.Token[:71]
+		}
+
 		// Validate token with server
 		api := client.NewClient(cfg)
 		ctx := context.Background()
 		user, err := api.GetMe(ctx)
-		if err != nil {
-			fmt.Printf("%s: Token validation warning: %v\n", ui.WarningStyle.Render("Note"), err)
-			fmt.Println("Saving token locally anyway.")
-		} else {
+		if err == nil && user != nil {
 			fmt.Printf("%s Logged in as %s (@%s)\n", ui.SuccessStyle.Render("✓"), ui.BoldStyle.Render(user.Username), user.Username)
+		} else {
+			// If GetMe failed, check if App Token is valid via notifications
+			if strings.HasPrefix(cfg.Token, "ct_app_") {
+				if notifs, errNotif := api.ListNotifications(ctx, false); errNotif == nil {
+					fmt.Printf("%s App Token authenticated successfully (%d notifications found).\n", ui.SuccessStyle.Render("✓"), len(notifs))
+				} else {
+					fmt.Printf("%s: Token validation warning: %v\n", ui.WarningStyle.Render("Note"), err)
+				}
+			} else {
+				fmt.Printf("%s: Token validation warning: %v\n", ui.WarningStyle.Render("Note"), err)
+			}
 		}
 
 		if err := config.Save(cfg); err != nil {
@@ -96,8 +109,13 @@ var authStatusCmd = &cobra.Command{
 		ctx := context.Background()
 		user, err := api.GetMe(ctx)
 		if err != nil {
-			fmt.Printf("%s: Connected to %s but token verification failed: %v\n", ui.ErrorStyle.Render("Error"), cfg.ServerURL, err)
-			return nil
+			if strings.HasPrefix(cfg.Token, "ct_app_") {
+				if notifs, errNotif := api.ListNotifications(ctx, false); errNotif == nil {
+					fmt.Printf("%s Connected to %s with App Token (%d notifications)\n", ui.SuccessStyle.Render("✓ Authenticated:"), cfg.ServerURL, len(notifs))
+					return nil
+				}
+			}
+			return fmt.Errorf("Connected to %s but token verification failed: %w", cfg.ServerURL, err)
 		}
 
 		fmt.Println(ui.HeaderStyle.Render("Authentication Status:"))
