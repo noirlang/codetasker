@@ -127,18 +127,17 @@ func StatusBadge(status string) string {
 		Render(label)
 }
 
-// Banner returns the exact stylized logo for CodeTasker matching the official </CODETASKER> branding.
+// Banner returns the compact stylized logo for CodeTasker matching logo-kucuk.png (</CT>).
 func Banner() string {
 	logo := `
-          ⣶  ⣠⠖⠋⠉⠻⡇  ⣠⠞⠉⠉⠲⡄  ⢻⡏⠑⢦⡀ ⢸⡏⠉⢹⢸⠋⢹⡏⢹ ⢻⡇ ⢀⡞⠉⢻ ⠘⣿ ⠘⠁⢻⡏⠉⢿⠈⣿⠉⢻⡄
-         ⢰⡏ ⣼⠏    ⠁ ⣰⠃    ⢹⡄ ⢸⡇ ⠈⣷ ⢸⡇  ⠈ ⢸⡇  ⢸⡇ ⢸⠁ ⠈  ⣿   ⢸⡇ ⠈ ⣿  ⣿
-    ⣠⡾   ⣼⠁⢰⡟      ⢠⡟      ⣿ ⢸⡇  ⢸⡇⢸⡇    ⢸⡇   ⣷ ⢸⣧    ⣿   ⢸⡇   ⣿  ⣿ ⢷⣄
- ⢀⣴⡾⠋   ⢠⡟ ⢸⡇      ⢸⡇  ⢠⡀  ⢹⡆⢸⡇  ⢸⡇⢸⡧⠦⡄  ⢸⡇   ⣿  ⢻⣷⡄  ⣿⢲⡄ ⢸⡷⢦  ⣿⢀⣰⠏  ⠙⢿⣦⡀
-⣴⡿⠋     ⣸⠇ ⢸⡇      ⢸⡇  ⠹⠋  ⢸⠇⢸⡇  ⢸⡇⢸⡇    ⢸⡇   ⣿   ⠙⣿⡄ ⣿ ⣿ ⢸⡇   ⣿⠈⢹⡄    ⠙⢿⣦
-⠻⣦⣀     ⣿  ⠸⣇      ⠘⣇      ⣿ ⢸⡇  ⢸⡇⢸⡇    ⢸⡇   ⢸⡆   ⠈⣷ ⣿ ⣿ ⢸⡇   ⣿ ⢸⡇    ⢀⣴⠟
- ⠈⠻⣷⣄  ⢸⡇   ⢻⡄    ⢀⡄⢻⡄    ⢰⠇ ⢸⡇  ⡾ ⢸⡇    ⢸⡇ ⢠⢤⣸⡇ ⡄  ⣿ ⣿ ⣿ ⢸⡇ ⢀ ⣿ ⠸⡇  ⣠⣾⠟⠁
-   ⠈⠻⣷ ⣾⠁    ⠻⣄⡀ ⣀⣼⡁ ⠻⣄⡀⢀⡴⠋  ⣸⡃⣀⠼⠁ ⢸⣇ ⣰⡇ ⣸⡇ ⡄ ⢸⣇ ⣷⡀⢠⠏⢀⣿ ⣿ ⣸⡇ ⣼⢀⣿  ⡇ ⣾⠟⠁
-       ⠋       ⠉⠉      ⠉⠁    ⠁⠈    ⠈  ⠁  ⠁  ⠁ ⠈⠈  ⠈⠁ ⠈⠈ ⢸⡄⠁ ⠈     ⢷
+         ⣶  ⣠⠖⠉⠙⢶⢰⠏⢹⡏⢳
+        ⢠⡏ ⣼⠃   ⠘  ⢸⡇⠈
+   ⣠⣾⠃  ⣼⠃⢸⡇       ⢸⡇ ⠘⢷⣄
+ ⣠⡾⠋   ⢀⡟ ⢸⠃       ⢸⡇   ⠙⢷⣄
+⣾⡋     ⢸⠇ ⢸⡆       ⢸⡇     ⢙⣷
+⠈⠻⣦⡀   ⣿  ⠘⣧       ⢸⡇   ⢀⣴⠟⠉
+  ⠈⠻⣦⡀⢰⡇   ⠹⣆   ⢀⡇ ⢸⡇ ⢀⣴⠟⠁
+    ⠈⠁⢼⠁    ⠈⠓⠒⠒⠉⠁ ⠛⠃ ⠈⠁
 `
 	return lipgloss.NewStyle().
 		Foreground(Emerald).
