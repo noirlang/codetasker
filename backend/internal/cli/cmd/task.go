@@ -21,7 +21,7 @@ var taskCmd = &cobra.Command{
 }
 
 var taskListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   "list [owner/repo]",
 	Short: "List tasks for a repository",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		api := client.NewClient(cfg)
@@ -29,40 +29,64 @@ var taskListCmd = &cobra.Command{
 
 		repoID, _ := cmd.Flags().GetInt64("repo-id")
 		repoName, _ := cmd.Flags().GetString("repo")
+		if repoName == "" && len(args) > 0 {
+			repoName = strings.TrimSpace(args[0])
+		}
+		if repoName == "" {
+			repoName = cfg.DefaultRepo
+		}
+
 		statusFilter, _ := cmd.Flags().GetString("status")
 		typeFilter, _ := cmd.Flags().GetString("type")
 		jsonOutput, _ := cmd.Flags().GetBool("json")
 
+		repos, err := api.ListRepos(ctx)
+		if err != nil {
+			return fmt.Errorf("list repos: %w", err)
+		}
+		if len(repos) == 0 {
+			fmt.Println(ui.WarningStyle.Render("No repositories found. Sync a repository first: 'codetasker repo sync <owner/repo>'"))
+			return nil
+		}
+
 		// If repoID not provided, try to resolve via repo name or default repo
 		if repoID == 0 {
-			if repoName == "" {
-				repoName = cfg.DefaultRepo
-			}
 			if repoName != "" {
-				repos, err := api.ListRepos(ctx)
-				if err == nil {
+				// 1. Exact match on FullName (e.g. amele-next/amele-next)
+				for _, r := range repos {
+					if strings.EqualFold(r.FullName, repoName) {
+						repoID = r.ID
+						repoName = r.FullName
+						break
+					}
+				}
+				// 2. Match on short Name
+				if repoID == 0 {
 					for _, r := range repos {
-						if strings.EqualFold(r.FullName, repoName) {
+						if strings.EqualFold(r.Name, repoName) {
 							repoID = r.ID
+							repoName = r.FullName
 							break
 						}
 					}
 				}
+				// 3. Suffix match
+				if repoID == 0 {
+					for _, r := range repos {
+						if strings.HasSuffix(strings.ToLower(r.FullName), "/"+strings.ToLower(repoName)) {
+							repoID = r.ID
+							repoName = r.FullName
+							break
+						}
+					}
+				}
+				if repoID == 0 {
+					return fmt.Errorf("repository %q not found in connected repositories (run 'codetasker repo list' to view available repositories)", repoName)
+				}
+			} else {
+				repoID = repos[0].ID
+				repoName = repos[0].FullName
 			}
-		}
-
-		if repoID == 0 {
-			// If still 0, try to list repositories and take the first one or ask
-			repos, err := api.ListRepos(ctx)
-			if err != nil {
-				return fmt.Errorf("list repos: %w", err)
-			}
-			if len(repos) == 0 {
-				fmt.Println(ui.WarningStyle.Render("No repositories found. Sync a repository first: 'codetasker repo sync <owner/repo>'"))
-				return nil
-			}
-			repoID = repos[0].ID
-			repoName = repos[0].FullName
 		}
 
 		tasks, err := api.ListTasks(ctx, repoID, statusFilter, typeFilter)
