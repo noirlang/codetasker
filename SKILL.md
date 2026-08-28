@@ -177,8 +177,10 @@ codetasker task list --repo <owner/repo> --status open --type FIXME
 ```
 
 #### Injecting Tasks & Opening Pull Requests:
+CodeTasker supports single location, multi-line, multi-file, new file creation, and interactive wizard modes:
+
 ```bash
-# Inject a TODO into an existing file and open automated PR
+# 1. Single location in an existing file:
 codetasker task inject \
   --repo "favilances/codetester-test" \
   --file "main.rb" \
@@ -187,13 +189,30 @@ codetasker task inject \
   --note "Refactor authentication middleware" \
   --branch "main"
 
-# Create a brand new file with a task annotation via PR
+# 2. Create a brand new file with a task annotation via PR:
 codetasker task inject \
   --repo "owner/repo" \
   --file "pkg/auth/jwt.go" \
   --new-file \
   --type "TODO" \
   --note "Implement token refresh loop"
+
+# 3. Multiple lines in the same file:
+codetasker task inject \
+  --repo "owner/repo" \
+  --file "main.go" \
+  --lines "12,25,50" \
+  --note "Add bounds check"
+
+# 4. Multi-location across multiple files (with optional new files) in ONE atomic commit + PR:
+codetasker task inject \
+  --repo "owner/repo" \
+  -L "src/main.go:42:Refactor handler" \
+  -L "src/auth.go:15:Validate session token" \
+  -L "pkg/scaffold.go:new:Initial scaffold module"
+
+# 5. Interactive Builder Wizard:
+codetasker task inject -i
 ```
 
 #### Updating Task Status & Assignee:
