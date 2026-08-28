@@ -107,29 +107,32 @@ var taskListCmd = &cobra.Command{
 
 		fmt.Printf("%s %s (%d tasks)\n\n", ui.HeaderStyle.Render("Code Tasks:"), ui.BoldStyle.Render(repoName), len(tasks))
 
-		var rows [][]string
-		for _, t := range tasks {
-			assignee := "-"
+		for i, t := range tasks {
+			typeBadge := ui.TaskTypeBadge(t.Type)
+			statusBadge := ui.StatusBadge(string(t.Status))
+			location := fmt.Sprintf("%s:%d", t.FilePath, t.LineNumber)
+
+			var meta []string
+			meta = append(meta, fmt.Sprintf("id: %s", t.ID.Hex()))
 			if t.AssigneeUsername != "" {
-				assignee = "@" + t.AssigneeUsername
+				meta = append(meta, fmt.Sprintf("assignee: @%s", t.AssigneeUsername))
+			}
+			if t.PullRequestURL != "" {
+				meta = append(meta, "pr linked")
+			}
+			if t.IssueURL != "" {
+				meta = append(meta, "issue linked")
 			}
 
-			idStr := t.ID.Hex()
-			if len(idStr) > 8 {
-				idStr = idStr[:8]
-			}
-
-			rows = append(rows, []string{
-				idStr,
-				ui.TaskTypeBadge(t.Type),
-				ui.StatusBadge(string(t.Status)),
-				fmt.Sprintf("%s:%d", t.FilePath, t.LineNumber),
-				assignee,
-				t.Content,
-			})
+			fmt.Printf("  %s  %s  %s  %s\n",
+				ui.SubtleStyle.Render(fmt.Sprintf("#%d", i+1)),
+				typeBadge,
+				ui.BoldStyle.Render(location),
+				statusBadge,
+			)
+			fmt.Printf("      %s\n", t.Content)
+			fmt.Printf("      %s\n\n", ui.SubtleStyle.Render(strings.Join(meta, " • ")))
 		}
-
-		fmt.Println(ui.RenderTable([]string{"ID", "TYPE", "STATUS", "LOCATION", "ASSIGNEE", "CONTENT"}, rows))
 		return nil
 	},
 }

@@ -66,65 +66,56 @@ var (
 			Margin(0, 0, 1, 0)
 )
 
-// TaskTypeBadge renders a styled colored badge for task types.
+// TaskTypeBadge renders a styled inline badge for task types.
 func TaskTypeBadge(taskType string) string {
-	var bg, fg lipgloss.Color
-	fg = lipgloss.Color("#000000")
-
-	switch strings.ToUpper(taskType) {
-	case "TODO":
-		bg = Emerald
-	case "FIXME":
-		bg = Yellow
-	case "BUG":
-		bg = Red
-		fg = lipgloss.Color("#ffffff")
-	case "HACK":
-		bg = Purple
-		fg = lipgloss.Color("#ffffff")
-	case "NOTE":
-		bg = Blue
-		fg = lipgloss.Color("#ffffff")
-	default:
-		bg = Gray
-		fg = lipgloss.Color("#ffffff")
-	}
-
-	return lipgloss.NewStyle().
-		Bold(true).
-		Foreground(fg).
-		Background(bg).
-		Padding(0, 1).
-		Render(strings.ToUpper(taskType))
-}
-
-// StatusBadge renders a badge for open, in_progress, resolved states.
-func StatusBadge(status string) string {
+	t := strings.ToUpper(strings.TrimSpace(taskType))
 	var color lipgloss.Color
-	var label string
 
-	switch strings.ToLower(status) {
-	case "open":
-		color = Red
-		label = "OPEN"
-	case "in_progress":
+	switch t {
+	case "TODO":
+		color = lipgloss.Color("#ffffff")
+	case "FIXME":
 		color = Yellow
-		label = "IN PROGRESS"
-	case "resolved":
-		color = Emerald
-		label = "RESOLVED"
+	case "BUG":
+		color = Red
+	case "HACK":
+		color = Purple
+	case "NOTE":
+		color = Cyan
 	default:
 		color = Gray
-		label = strings.ToUpper(status)
 	}
 
 	return lipgloss.NewStyle().
 		Bold(true).
 		Foreground(color).
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(color).
-		Padding(0, 1).
-		Render(label)
+		Render("[" + t + "]")
+}
+
+// StatusBadge renders a sleek inline badge for open, in_progress, resolved states.
+func StatusBadge(status string) string {
+	var color lipgloss.Color
+	var label string
+
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "open":
+		color = Red
+		label = "open"
+	case "in_progress":
+		color = Yellow
+		label = "in progress"
+	case "resolved":
+		color = lipgloss.Color("#ffffff")
+		label = "resolved"
+	default:
+		color = Gray
+		label = strings.ToLower(status)
+	}
+
+	return lipgloss.NewStyle().
+		Bold(true).
+		Foreground(color).
+		Render("(" + label + ")")
 }
 
 // Banner returns the compact stylized logo for CodeTasker matching logo-kucuk.png (</CT>).

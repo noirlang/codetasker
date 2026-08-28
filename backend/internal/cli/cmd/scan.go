@@ -111,19 +111,21 @@ var scanCmd = &cobra.Command{
 			return nil
 		}
 
-		var rows [][]string
+		fmt.Printf("%s %d annotations found across %d files\n\n", ui.HeaderStyle.Render("Scan Results:"), len(parsedTasks), len(fileContents))
+
 		counts := make(map[string]int)
-
-		for _, t := range parsedTasks {
+		for i, t := range parsedTasks {
 			counts[strings.ToUpper(t.Type)]++
-			rows = append(rows, []string{
-				ui.TaskTypeBadge(t.Type),
-				fmt.Sprintf("%s:%d", t.FilePath, t.LineNumber),
-				t.Content,
-			})
-		}
+			typeBadge := ui.TaskTypeBadge(t.Type)
+			location := fmt.Sprintf("%s:%d", t.FilePath, t.LineNumber)
 
-		fmt.Println(ui.RenderTable([]string{"TYPE", "LOCATION", "ANNOTATION NOTE"}, rows))
+			fmt.Printf("  %s  %s  %s\n",
+				ui.SubtleStyle.Render(fmt.Sprintf("#%d", i+1)),
+				typeBadge,
+				ui.BoldStyle.Render(location),
+			)
+			fmt.Printf("      %s\n\n", t.Content)
+		}
 
 		fmt.Println()
 		fmt.Printf("%s %d annotations found across %d files\n", ui.BoldStyle.Render("Summary:"), len(parsedTasks), len(fileContents))
