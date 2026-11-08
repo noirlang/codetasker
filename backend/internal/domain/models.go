@@ -5,10 +5,57 @@
 package domain
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+// FlexibleTime handles parsing various datetime formats from JSON requests
+// (e.g. RFC3339, "YYYY-MM-DD", etc.) and converts them to standard time.Time.
+type FlexibleTime struct {
+	time.Time
+}
+
+func (ft *FlexibleTime) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), "\"")
+	if s == "" || s == "null" {
+		return nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		ft.Time = t.UTC()
+		return nil
+	}
+	if t, err := time.Parse("2006-01-02T15:04:05Z07:00", s); err == nil {
+		ft.Time = t.UTC()
+		return nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		ft.Time = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, time.UTC)
+		return nil
+	}
+	if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+		ft.Time = t.UTC()
+		return nil
+	}
+	return fmt.Errorf("unable to parse date string: %s", s)
+}
+
+func (ft *FlexibleTime) MarshalJSON() ([]byte, error) {
+	if ft == nil || ft.IsZero() {
+		return []byte("null"), nil
+	}
+	return []byte(fmt.Sprintf("%q", ft.UTC().Format(time.RFC3339))), nil
+}
+
+func (ft *FlexibleTime) ToTime() *time.Time {
+	if ft == nil || ft.IsZero() {
+		return nil
+	}
+	t := ft.Time.UTC()
+	return &t
+}
 
 // TaskStatus represents the lifecycle state of a TODO/FIXME task discovered
 // in a repository. The allowed values are constrained by the TaskStatus constants.
@@ -167,6 +214,9 @@ type Task struct {
 
 	// MaintainerEmail is the email address of the maintainer, used for email notifications.
 	MaintainerEmail string `bson:"maintainer_email,omitempty" json:"maintainer_email,omitempty"`
+
+	// DueDate is the target completion date or deadline for the task.
+	DueDate *time.Time `bson:"due_date,omitempty" json:"due_date,omitempty"`
 }
 
 // TaskLocation represents a single file+line target within an inject task request.
@@ -212,6 +262,12 @@ type InjectTaskRequest struct {
 	// IssueURL is the linked GitHub Issue URL.
 	IssueURL string `json:"issue_url,omitempty"`
 
+	// DueDate is an optional deadline for the task.
+	DueDate *FlexibleTime `json:"due_date,omitempty"`
+
+	// AssigneeUsername is an optional GitHub username to assign to this task.
+	AssigneeUsername string `json:"assignee_username,omitempty"`
+
 	// Locations contains multiple target files/lines/descriptions if multi-location injection is used.
 	Locations []TaskLocation `json:"locations,omitempty"`
 }
@@ -233,6 +289,12 @@ type UpdateTaskRequest struct {
 
 	// ClearAssignee when true removes any existing assignee from the task.
 	ClearAssignee bool `json:"clear_assignee,omitempty"`
+
+	// DueDate is the target completion date or deadline for the task.
+	DueDate *FlexibleTime `json:"due_date,omitempty"`
+
+	// ClearDueDate when true removes any existing due date from the task.
+	ClearDueDate bool `json:"clear_due_date,omitempty"`
 }
 
 // SyncedRepo represents a repository that has been activated/synced by a user.

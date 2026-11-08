@@ -15,6 +15,7 @@ import type {
   TaskStatus,
   FileTreeNode,
   InjectTaskRequest,
+  UpdateTaskRequest,
   ApiError,
   Collaborator,
   RepoRole,
@@ -626,24 +627,35 @@ export const tasksApi = {
   },
 
   /**
+   * Get all tasks assigned to the current user.
+   * GET /api/tasks/my
+   */
+  getMyTasks: async (params?: { status?: TaskStatus; repo_id?: number }): Promise<Task[]> => {
+    const { data } = await client.get<{ tasks: Task[]; count: number }>('/tasks/my', {
+      params,
+    });
+    return data.tasks || [];
+  },
+
+  /**
    * Update the status of a task (e.g. open → in_progress).
    * PATCH /api/tasks/:id
    */
   updateStatus: async (id: string, status: TaskStatus): Promise<Task> => {
-    const { data } = await client.patch<Task>(`/tasks/${id}`, { status });
-    return data;
+    const { data } = await client.patch<any>(`/tasks/${id}`, { status });
+    return data.task || data;
   },
 
   /**
-   * Update a task generic fields (e.g. status and/or pr_url).
+   * Update a task generic fields (e.g. status, pr_url, assignee, due_date).
    * PATCH /api/tasks/:id
    */
   updateTask: async (
     id: string,
-    updates: { status?: TaskStatus; pr_url?: string; issue_url?: string; assignee_username?: string; clear_assignee?: boolean }
+    updates: UpdateTaskRequest
   ): Promise<Task> => {
-    const { data } = await client.patch<Task>(`/tasks/${id}`, updates);
-    return data;
+    const { data } = await client.patch<any>(`/tasks/${id}`, updates);
+    return data.task || data;
   },
 
   /**

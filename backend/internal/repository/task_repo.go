@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/codetasker/backend/internal/database"
@@ -50,22 +51,45 @@ func (r *TaskRepository) UpsertTask(ctx context.Context, task *domain.Task) erro
 		"type":      task.Type,
 	}
 
+	setFields := bson.M{
+		"repo_name":           task.RepoName,
+		"line_number":         task.LineNumber,
+		"commit_sha":          task.CommitSHA,
+		"updated_at":          now,
+		"maintainer_username": task.MaintainerUsername,
+		"maintainer_email":    task.MaintainerEmail,
+	}
+	if task.DueDate != nil {
+		setFields["due_date"] = task.DueDate
+	}
+	if task.AssigneeUsername != "" {
+		setFields["assignee_username"] = task.AssigneeUsername
+		setFields["assignee_avatar_url"] = task.AssigneeAvatarURL
+		if task.AssigneeID != nil {
+			setFields["assignee_id"] = task.AssigneeID
+		}
+	}
+
+	setOnInsert := bson.M{
+		"status":                domain.TaskStatusOpen,
+		"created_at":            now,
+		"created_by_username":   task.CreatedByUsername,
+		"created_by_avatar_url": task.CreatedByAvatarURL,
+	}
+	if task.DueDate != nil {
+		setOnInsert["due_date"] = task.DueDate
+	}
+	if task.AssigneeUsername != "" {
+		setOnInsert["assignee_username"] = task.AssigneeUsername
+		setOnInsert["assignee_avatar_url"] = task.AssigneeAvatarURL
+		if task.AssigneeID != nil {
+			setOnInsert["assignee_id"] = task.AssigneeID
+		}
+	}
+
 	update := bson.M{
-		"$set": bson.M{
-			"repo_name":           task.RepoName,
-			"line_number":         task.LineNumber,
-			"commit_sha":          task.CommitSHA,
-			"updated_at":          now,
-			"maintainer_username": task.MaintainerUsername,
-			"maintainer_email":    task.MaintainerEmail,
-		},
-		// Only written on first insert — preserves manual status changes.
-		"$setOnInsert": bson.M{
-			"status":                domain.TaskStatusOpen,
-			"created_at":            now,
-			"created_by_username":   task.CreatedByUsername,
-			"created_by_avatar_url": task.CreatedByAvatarURL,
-		},
+		"$set":         setFields,
+		"$setOnInsert": setOnInsert,
 	}
 
 	opts := options.Update().SetUpsert(true)
@@ -233,13 +257,17 @@ func (r *TaskRepository) DeleteTask(ctx context.Context, id primitive.ObjectID) 
 }
 
 // UpdateAssignee sets or clears the assignee for a task identified by id.
-// When assigneeID is non-nil the username and avatarURL are written alongside it.
-// When assigneeID is nil all three assignee fields are cleared (empty strings / nil).
+// If username is non-empty, the username and avatar are saved (along with assigneeID if non-nil).
+// When username is empty or cleared, all assignee fields are cleared.
 func (r *TaskRepository) UpdateAssignee(ctx context.Context, id primitive.ObjectID, assigneeID *primitive.ObjectID, username, avatarURL string) error {
 	filter := bson.M{"_id": id}
 	setFields := bson.M{"updated_at": time.Now().UTC()}
-	if assigneeID != nil {
-		setFields["assignee_id"] = assigneeID
+	if username != "" {
+		if assigneeID != nil {
+			setFields["assignee_id"] = assigneeID
+		} else {
+			setFields["assignee_id"] = nil
+		}
 		setFields["assignee_username"] = username
 		setFields["assignee_avatar_url"] = avatarURL
 	} else {
@@ -256,6 +284,79 @@ func (r *TaskRepository) UpdateAssignee(ctx context.Context, id primitive.Object
 		return fmt.Errorf("task %s not found", id.Hex())
 	}
 	return nil
+}
+
+// UpdateDueDate updates or clears the target deadline for a task.
+func (r *TaskRepository) UpdateDueDate(ctx context.Context, id primitive.ObjectID, dueDate *time.Time) error {
+	filter := bson.M{"_id": id}
+	setFields := bson.M{
+		"updated_at": time.Now().UTC(),
+		"due_date":   dueDate,
+	}
+	update := bson.M{"$set": setFields}
+	res, err := r.col.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("UpdateDueDate(%s): %w", id.Hex(), err)
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("task %s not found", id.Hex())
+	}
+	return nil
+}
+
+// FindByAssignee queries tasks assigned to a specific user (by ObjectID or username).
+// Optionally filters by status and repoID.
+func (r *TaskRepository) FindByAssignee(ctx context.Context, userID primitive.ObjectID, username string, status domain.TaskStatus, repoID int64) ([]domain.Task, error) {
+	orConditions := []bson.M{}
+	if !userID.IsZero() {
+		orConditions = append(orConditions, bson.M{"assignee_id": userID})
+	}
+	if username != "" {
+		orConditions = append(orConditions, bson.M{
+			"assignee_username": bson.M{
+				"$regex":   "^" + regexp.QuoteMeta(username) + "$",
+				"$options": "i",
+			},
+		})
+	}
+
+	if len(orConditions) == 0 {
+		return []domain.Task{}, nil
+	}
+
+	filter := bson.M{
+		"$or": orConditions,
+	}
+
+	if status != "" {
+		filter["status"] = status
+	}
+	if repoID > 0 {
+		filter["repo_id"] = repoID
+	}
+
+	findOpts := options.Find().SetSort(bson.D{
+		{Key: "status", Value: 1},
+		{Key: "due_date", Value: 1},
+		{Key: "updated_at", Value: -1},
+	})
+
+	cursor, err := r.col.Find(ctx, filter, findOpts)
+	if err != nil {
+		return nil, fmt.Errorf("FindByAssignee: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var tasks []domain.Task
+	if err := cursor.All(ctx, &tasks); err != nil {
+		return nil, fmt.Errorf("FindByAssignee cursor decode: %w", err)
+	}
+
+	if tasks == nil {
+		tasks = []domain.Task{}
+	}
+
+	return tasks, nil
 }
 
 // UpdateCompletedBy sets the completed_by fields and completed_at timestamp for a resolved task.

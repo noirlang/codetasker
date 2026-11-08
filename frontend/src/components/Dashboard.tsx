@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Activity,
   CheckCircle2,
@@ -32,6 +32,7 @@ import {
   Copy,
   Trash2,
   Plus,
+  ListTodo,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ScrollReveal from 'scrollreveal';
@@ -40,6 +41,7 @@ import { appTokensApi, reposApi, systemApi } from '../api/client';
 import type { Repo, ApiError, Organization, User, AppToken } from '../types';
 import Spinner from './ui/Spinner';
 import NotificationBell from './NotificationBell';
+import MyTasks from './MyTasks';
 
 // ── 3D Tilt Card Helper Component ──────────────────────────────────────────
 function TiltCard({
@@ -723,6 +725,7 @@ function SettingsContent({
 
 export default function Dashboard() {
   const navigate  = useNavigate();
+  const location  = useLocation();
   const { user, logout }= useAuthStore();
   const [repos, setRepos]     = useState<Repo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -734,23 +737,46 @@ export default function Dashboard() {
 
   // Menu/Sidebar states
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
-  const [activeIdx, setActiveIdx] = useState<number>(0);
+  const [activeIdx, setActiveIdx] = useState<number>(() => {
+    return location.pathname === '/my-tasks' ? 1 : 0;
+  });
+
+  // Keep activeIdx in sync with route path
+  useEffect(() => {
+    if (location.pathname === '/my-tasks') {
+      setActiveIdx(1);
+    } else if (location.pathname === '/dashboard' && activeIdx === 1) {
+      setActiveIdx(0);
+    }
+  }, [location.pathname, activeIdx]);
 
   const menuItems = [
     { label: 'Dashboard', icon: LayoutDashboard },
+    { label: 'My Tasks', icon: ListTodo },
     { label: 'Synced Repos', icon: GitFork },
     { label: 'Settings', icon: Settings },
     { label: 'Docs', icon: BookOpen },
   ];
   const pageTitle = menuItems[activeIdx]?.label ?? 'Dashboard';
   const pageDescription =
-    activeIdx === 2
-      ? 'Account, connected sources, and repository sync security.'
-      : activeIdx === 3
-      ? 'Quick reference for syncing repositories, tasks, commits, pull requests, and Actions.'
-      : activeIdx === 1
+    activeIdx === 1
+      ? 'Tasks and annotations assigned to your account across all repositories.'
+      : activeIdx === 2
       ? 'Repositories with CodeTasker webhook sync enabled.'
+      : activeIdx === 3
+      ? 'Account, connected sources, and repository sync security.'
+      : activeIdx === 4
+      ? 'Quick reference for syncing repositories, tasks, commits, pull requests, and Actions.'
       : 'Repositories available through your GitHub account and organizations.';
+
+  const handleSelectTab = (idx: number) => {
+    setActiveIdx(idx);
+    if (idx === 1) {
+      navigate('/my-tasks');
+    } else if (idx === 0) {
+      navigate('/dashboard');
+    }
+  };
 
   // Fetch organizations on mount
   useEffect(() => {
@@ -803,7 +829,7 @@ export default function Dashboard() {
 
   // Fetch repositories on mount, when organization changes, or when switching to Dashboard/Synced Repos tabs
   useEffect(() => {
-    if (activeIdx < 2) {
+    if (activeIdx === 0 || activeIdx === 2) {
       fetchRepos();
     }
   }, [fetchRepos, activeIdx]);
@@ -832,14 +858,18 @@ export default function Dashboard() {
 
   // ── Render states ──────────────────────────────────────────────────────
 
-  const displayedRepos = activeIdx === 1 ? repos.filter((r) => r.is_synced) : repos;
+  const displayedRepos = activeIdx === 2 ? repos.filter((r) => r.is_synced) : repos;
 
   const content = (() => {
-    if (activeIdx === 2) {
-      return <SettingsContent user={user} repos={repos} orgs={orgs} />;
+    if (activeIdx === 1) {
+      return <MyTasks />;
     }
 
     if (activeIdx === 3) {
+      return <SettingsContent user={user} repos={repos} orgs={orgs} />;
+    }
+
+    if (activeIdx === 4) {
       return <DocsContent />;
     }
 
@@ -876,7 +906,7 @@ export default function Dashboard() {
       );
     }
 
-    if (activeIdx === 1 && displayedRepos.length === 0) {
+    if (activeIdx === 2 && displayedRepos.length === 0) {
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center min-h-[300px]">
           <p className="text-sm text-[#a0a0a0]">No synced repositories found.</p>
@@ -938,7 +968,7 @@ export default function Dashboard() {
                 key={item.label}
                 onMouseEnter={() => setHoveredIdx(idx)}
                 onMouseLeave={() => setHoveredIdx(null)}
-                onClick={() => setActiveIdx(idx)}
+                onClick={() => handleSelectTab(idx)}
                 className={`relative flex items-center gap-3 px-4 py-2.5 rounded text-sm transition-all duration-200 text-left cursor-pointer h-[40px] ${
                   activeIdx === idx
                     ? 'text-white font-medium bg-white/[0.01]'
@@ -1039,7 +1069,7 @@ export default function Dashboard() {
         {menuItems.map((item, idx) => (
           <button
             key={item.label}
-            onClick={() => setActiveIdx(idx)}
+            onClick={() => handleSelectTab(idx)}
             className={[
               'inline-flex h-8 shrink-0 items-center gap-1.5 rounded border px-3 text-[10px] font-semibold transition-colors',
               activeIdx === idx
@@ -1060,9 +1090,9 @@ export default function Dashboard() {
           <div>
             <div className="flex items-baseline gap-4">
               <h1 className="text-2xl font-bold text-white tracking-tight">{pageTitle}</h1>
-              {!loading && repos.length > 0 && activeIdx < 2 && (
+              {!loading && repos.length > 0 && (activeIdx === 0 || activeIdx === 2) && (
                 <span className="text-xs font-mono text-[#666666] bg-[#141414] border border-[#222222] px-2 py-0.5 rounded">
-                  {activeIdx === 1 ? `${displayedRepos.length} synced` : `${repos.length} total`}
+                  {activeIdx === 2 ? `${displayedRepos.length} synced` : `${repos.length} total`}
                 </span>
               )}
             </div>
@@ -1071,7 +1101,7 @@ export default function Dashboard() {
 
           {/* Header Actions (Organization Selector + Notification Bell) */}
           <div className="flex items-center gap-3">
-            {activeIdx < 2 && (
+            {(activeIdx === 0 || activeIdx === 2) && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-[#666666] font-mono">Source:</span>
                 <select

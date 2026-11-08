@@ -90,6 +90,14 @@ export default function App() {
         }
       />
       <Route
+        path="/my-tasks"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/repos/:owner/:repo"
         element={
           <ProtectedRoute>

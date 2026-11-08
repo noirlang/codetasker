@@ -6,6 +6,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -75,6 +76,7 @@ func NewTaskController(
 // The group is expected to already have the Protected JWT middleware applied.
 func (tc *TaskController) RegisterRoutes(group fiber.Router) {
 	group.Get("/tasks", tc.ListTasksByRepo)
+	group.Get("/tasks/my", tc.ListMyTasks)
 	group.Patch("/tasks/:id", tc.UpdateTaskStatus)
 	group.Post("/tasks/inject", tc.InjectTODO)
 	// Comment sub-resources on tasks.
@@ -86,6 +88,90 @@ func (tc *TaskController) RegisterRoutes(group fiber.Router) {
 	group.Post("/tasks/:id/proposals", tc.AddProposal)
 	group.Patch("/tasks/:id/proposals/:proposalId", tc.UpdateProposalStatus)
 	group.Delete("/tasks/:id/proposals/:proposalId", tc.DeleteProposal)
+}
+
+// canAccessTask verifies if the given user has read or write access to a task.
+// Access is granted if:
+// 1. The user is assigned to the task (by AssigneeID or GitHub username).
+// 2. The user has synced this repository themselves.
+// 3. The user is an authorized collaborator on this repository.
+func (tc *TaskController) canAccessTask(ctx context.Context, userID primitive.ObjectID, task *domain.Task, requireWrite bool) bool {
+	// 1. If user is the assignee of the task, they have full read & write (comment, status, discussion) access.
+	if task.AssigneeID != nil && *task.AssigneeID == userID {
+		return true
+	}
+	if task.AssigneeUsername != "" {
+		if user, _ := tc.userRepo.FindByObjectID(ctx, userID); user != nil {
+			if strings.EqualFold(user.Username, task.AssigneeUsername) {
+				return true
+			}
+		}
+	}
+
+	// 2. Check if user synced this repo themselves.
+	userSync, _ := tc.syncedRepoRepo.FindByRepoID(ctx, userID, task.RepoID)
+	if userSync != nil {
+		return true
+	}
+
+	// 3. Check if user is a collaborator on the repository.
+	collab, _ := tc.collaboratorRepo.FindByUserAndRepo(ctx, userID, task.RepoID)
+	if collab != nil {
+		if !requireWrite {
+			return true
+		}
+		return collab.Role == domain.RoleOwner || collab.Role == domain.RoleMaintainer || collab.Role == domain.RoleDeveloper
+	}
+
+	// 4. Fallback: check if the repo is synced and the sync record owner matches.
+	synced, _ := tc.syncedRepoRepo.FindByRepoIDOnly(ctx, task.RepoID)
+	if synced != nil && synced.UserID == userID {
+		return true
+	}
+
+	return false
+}
+
+// ListMyTasks returns all tasks assigned to the authenticated user across all synced repositories.
+// Supports filtering by ?status= (open, in_progress, resolved) and ?repo_id=.
+//
+// Route: GET /api/tasks/my
+func (tc *TaskController) ListMyTasks(c *fiber.Ctx) error {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	user, err := tc.userRepo.FindByObjectID(c.Context(), userID)
+	if err != nil || user == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":   "user_not_found",
+			"message": "Authenticated user could not be found",
+		})
+	}
+
+	statusFilter := domain.TaskStatus(c.Query("status"))
+	var repoID int64
+	if repoIDStr := c.Query("repo_id"); repoIDStr != "" {
+		repoID, _ = strconv.ParseInt(repoIDStr, 10, 64)
+	}
+
+	tasks, err := tc.taskService.GetTasksByAssignee(c.Context(), userID, user.Username, statusFilter, repoID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "get_my_tasks_failed",
+			"message": err.Error(),
+		})
+	}
+
+	if tasks == nil {
+		tasks = []domain.Task{}
+	}
+
+	return c.JSON(fiber.Map{
+		"tasks": tasks,
+		"count": len(tasks),
+	})
 }
 
 // ListTasksByRepo returns all tasks for a repository, identified by the
@@ -159,31 +245,25 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 	}
 
 	// Verify collaborator permissions.
-	synced, err := tc.syncedRepoRepo.FindByRepoIDOnly(c.Context(), task.RepoID)
-	if err == nil && synced != nil {
-		if synced.UserID != userID {
-			collab, _ := tc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
-			if collab == nil || (collab.Role != domain.RoleOwner && collab.Role != domain.RoleMaintainer && collab.Role != domain.RoleDeveloper) {
-				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-					"error":   "forbidden",
-					"message": "You do not have permissions to modify tasks in this repository",
-				})
-			}
-		}
+	if !tc.canAccessTask(c.Context(), userID, task, true) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error":   "forbidden",
+			"message": "You do not have permissions to modify tasks in this repository",
+		})
 	}
 
 	var req domain.UpdateTaskRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "invalid_body",
-			"message": "request body must be valid JSON with 'status', 'pr_url', 'issue_url', 'assignee_username', or 'clear_assignee' fields",
+			"message": "request body must be valid JSON with 'status', 'pr_url', 'issue_url', 'assignee_username', 'clear_assignee', 'due_date', or 'clear_due_date' fields",
 		})
 	}
 
-	if req.Status == "" && req.PullRequestURL == "" && req.IssueURL == "" && req.AssigneeUsername == "" && !req.ClearAssignee {
+	if req.Status == "" && req.PullRequestURL == "" && req.IssueURL == "" && req.AssigneeUsername == "" && !req.ClearAssignee && req.DueDate == nil && !req.ClearDueDate {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "missing_fields",
-			"message": "at least one of 'status', 'pr_url', 'issue_url', 'assignee_username', or 'clear_assignee' is required",
+			"message": "at least one of 'status', 'pr_url', 'issue_url', 'assignee_username', 'clear_assignee', 'due_date', or 'clear_due_date' is required",
 		})
 	}
 
@@ -292,6 +372,51 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 		})
 	}
 
+	// ── Handle due date update ─────────────────────────────────────────────────
+	if req.ClearDueDate {
+		if err := tc.taskRepo.UpdateDueDate(c.Context(), taskObjID, nil); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":   "update_failed",
+				"message": err.Error(),
+			})
+		}
+		_ = tc.activityRepo.Log(c.Context(), &domain.ActivityLog{
+			RepoID:      task.RepoID,
+			RepoName:    task.RepoName,
+			ActorID:     userID,
+			ActorName:   actorName,
+			ActorAvatar: actorAvatar,
+			Action:      "task_due_date_cleared",
+			TargetType:  "task",
+			TargetID:    taskID,
+			TargetLabel: task.Content,
+		})
+	} else if req.DueDate != nil {
+		due := req.DueDate.ToTime()
+		if err := tc.taskRepo.UpdateDueDate(c.Context(), taskObjID, due); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":   "update_failed",
+				"message": err.Error(),
+			})
+		}
+		dueFormatted := ""
+		if due != nil {
+			dueFormatted = due.Format("2006-01-02")
+		}
+		_ = tc.activityRepo.Log(c.Context(), &domain.ActivityLog{
+			RepoID:      task.RepoID,
+			RepoName:    task.RepoName,
+			ActorID:     userID,
+			ActorName:   actorName,
+			ActorAvatar: actorAvatar,
+			Action:      "task_due_date_updated",
+			TargetType:  "task",
+			TargetID:    taskID,
+			TargetLabel: task.Content,
+			Meta:        map[string]string{"due_date": dueFormatted},
+		})
+	}
+
 	// ── Handle completion tracking (when status becomes resolved) ──────────────
 	if req.Status == domain.TaskStatusResolved && task.Status != domain.TaskStatusResolved {
 		completingUser, _ := tc.userRepo.FindByObjectID(c.Context(), userID)
@@ -347,9 +472,8 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 	}
 
 	// ── Handle status / PR URL / Issue URL update (if provided) ────────────────
-	var updatedTask *domain.Task
 	if req.Status != "" || req.PullRequestURL != "" || req.IssueURL != "" {
-		updatedTask, err = tc.taskService.UpdateTask(c.Context(), taskID, req.Status, req.PullRequestURL, req.IssueURL)
+		_, err = tc.taskService.UpdateTask(c.Context(), taskID, req.Status, req.PullRequestURL, req.IssueURL)
 		if err != nil {
 			// If the error message indicates the task was not found, return 404.
 			if isNotFoundError(err.Error()) {
@@ -370,15 +494,15 @@ func (tc *TaskController) UpdateTaskStatus(c *fiber.Ctx) error {
 				"message": err.Error(),
 			})
 		}
-	} else {
-		// Re-fetch the task so we return the current state.
-		updatedTask, err = tc.taskService.GetTaskByID(c.Context(), taskID)
-		if err != nil || updatedTask == nil {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":   "not_found",
-				"message": "task not found: " + taskID,
-			})
-		}
+	}
+
+	// Re-fetch the task so we return the complete current state (status, assignee, due date).
+	updatedTask, err := tc.taskService.GetTaskByID(c.Context(), taskID)
+	if err != nil || updatedTask == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   "not_found",
+			"message": "task not found: " + taskID,
+		})
 	}
 
 	return c.JSON(fiber.Map{
@@ -496,6 +620,19 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 		taskType = "TODO"
 	}
 
+	var assigneeID *primitive.ObjectID
+	assigneeUsername := strings.TrimSpace(req.AssigneeUsername)
+	assigneeAvatarURL := ""
+	if assigneeUsername != "" {
+		assigneeAvatarURL = fmt.Sprintf("https://github.com/%s.png", assigneeUsername)
+		if assigneeUser, _ := tc.userRepo.FindByUsername(c.Context(), assigneeUsername); assigneeUser != nil {
+			assigneeID = &assigneeUser.ID
+			if assigneeUser.AvatarURL != "" {
+				assigneeAvatarURL = assigneeUser.AvatarURL
+			}
+		}
+	}
+
 	// Upsert all new tasks in MongoDB so they appear immediately in the dashboard
 	for _, loc := range req.Locations {
 		locDesc := strings.TrimSpace(loc.Description)
@@ -520,6 +657,10 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 			Type:               taskType,
 			Status:             domain.TaskStatusOpen,
 			IssueURL:           req.IssueURL,
+			DueDate:            req.DueDate.ToTime(),
+			AssigneeID:         assigneeID,
+			AssigneeUsername:   assigneeUsername,
+			AssigneeAvatarURL:  assigneeAvatarURL,
 			CreatedByUsername:  createdByUsername,
 			CreatedByAvatarURL: createdByAvatarURL,
 			MaintainerUsername: maintainerUsername,
@@ -528,6 +669,17 @@ func (tc *TaskController) InjectTODO(c *fiber.Ctx) error {
 
 		if err := tc.taskService.UpsertInjectedTask(c.Context(), task); err != nil {
 			_ = err
+		}
+
+		// Create notification for assignee if assigned to someone else
+		if assigneeID != nil && *assigneeID != userID {
+			_ = tc.notifRepo.Create(c.Context(), &domain.Notification{
+				UserID:  *assigneeID,
+				Type:    domain.NotifTaskAssigned,
+				Title:   "You've been assigned to a task",
+				Message: fmt.Sprintf("%s assigned you to: %s", createdByUsername, locDesc),
+				Link:    fmt.Sprintf("/repos/%s/%s", req.RepoOwner, req.RepoName),
+			})
 		}
 	}
 
@@ -566,21 +718,11 @@ func (tc *TaskController) ListComments(c *fiber.Ctx) error {
 	}
 
 	// Verify collaborator permissions.
-	synced, err := tc.syncedRepoRepo.FindByRepoIDOnly(c.Context(), task.RepoID)
-	if err != nil || synced == nil {
+	if !tc.canAccessTask(c.Context(), userID, task, false) {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error":   "forbidden",
-			"message": "Repository not found or access denied",
+			"message": "You do not have permissions to view comments on this task",
 		})
-	}
-	if synced.UserID != userID {
-		collab, _ := tc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
-		if collab == nil {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "forbidden",
-				"message": "You do not have permissions to view comments in this repository",
-			})
-		}
 	}
 
 	comments, err := tc.commentRepo.FindByTask(c.Context(), taskObjID)
@@ -622,21 +764,11 @@ func (tc *TaskController) AddComment(c *fiber.Ctx) error {
 	}
 
 	// Verify collaborator permissions.
-	synced, err := tc.syncedRepoRepo.FindByRepoIDOnly(c.Context(), task.RepoID)
-	if err != nil || synced == nil {
+	if !tc.canAccessTask(c.Context(), userID, task, true) {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error":   "forbidden",
-			"message": "Repository not found or access denied",
+			"message": "You do not have permissions to comment on this task",
 		})
-	}
-	if synced.UserID != userID {
-		collab, _ := tc.collaboratorRepo.FindByUserAndRepo(c.Context(), userID, synced.RepoID)
-		if collab == nil || (collab.Role != domain.RoleOwner && collab.Role != domain.RoleMaintainer && collab.Role != domain.RoleDeveloper) {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "forbidden",
-				"message": "You do not have permissions to comment on tasks in this repository",
-			})
-		}
 	}
 
 	// Parse comment body.

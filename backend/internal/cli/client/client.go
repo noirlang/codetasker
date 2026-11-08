@@ -285,7 +285,23 @@ func (c *Client) UpdateTaskStatus(ctx context.Context, taskID string, status dom
 
 func (c *Client) UpdateTaskAssignee(ctx context.Context, taskID, username string) error {
 	endpoint := fmt.Sprintf("/tasks/%s", url.PathEscape(taskID))
-	body := map[string]string{"assignee_username": username}
+	var body map[string]interface{}
+	if strings.TrimSpace(username) == "" {
+		body = map[string]interface{}{"clear_assignee": true}
+	} else {
+		body = map[string]interface{}{"assignee_username": username}
+	}
+	return c.doRequest(ctx, http.MethodPatch, endpoint, body, nil)
+}
+
+func (c *Client) UpdateTaskDueDate(ctx context.Context, taskID string, dueDate *time.Time) error {
+	endpoint := fmt.Sprintf("/tasks/%s", url.PathEscape(taskID))
+	var body map[string]interface{}
+	if dueDate == nil {
+		body = map[string]interface{}{"clear_due_date": true}
+	} else {
+		body = map[string]interface{}{"due_date": dueDate.Format(time.RFC3339)}
+	}
 	return c.doRequest(ctx, http.MethodPatch, endpoint, body, nil)
 }
 

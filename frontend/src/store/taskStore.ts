@@ -57,6 +57,11 @@ interface TaskState {
   updateTaskAssignee: (id: string, username: string | null) => Promise<void>;
 
   /**
+   * Update a task's target due date in the backend and local store.
+   */
+  updateTaskDueDate: (id: string, dueDate: string | null) => Promise<void>;
+
+  /**
    * Immediately update a task's status in the local store (no API call).
    * Used internally for optimistic updates; also exposed for testing.
    */
@@ -208,6 +213,42 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
       const apiErr = err as ApiError;
       set({ error: apiErr.message ?? 'Failed to update task assignee.' });
+      throw err;
+    }
+  },
+
+  updateTaskDueDate: async (id: string, dueDate: string | null) => {
+    const previousTasks = get().tasks;
+
+    // Optimistically update locally
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              due_date: dueDate || undefined,
+              updated_at: new Date().toISOString(),
+            }
+          : t
+      ),
+    }));
+
+    try {
+      let updated: Task;
+      if (dueDate) {
+        updated = await tasksApi.updateTask(id, { due_date: dueDate });
+      } else {
+        updated = await tasksApi.updateTask(id, { clear_due_date: true });
+      }
+      set((state) => ({
+        tasks: state.tasks.map((t) => (t.id === updated.id ? updated : t)),
+      }));
+    } catch (err) {
+      // Revert on failure
+      set({ tasks: previousTasks });
+
+      const apiErr = err as ApiError;
+      set({ error: apiErr.message ?? 'Failed to update task due date.' });
       throw err;
     }
   },

@@ -264,6 +264,38 @@ func (s *TaskService) GetTasksByRepo(ctx context.Context, repoID int64) ([]domai
 	return tasks, nil
 }
 
+// GetTasksByAssignee returns all tasks assigned to a user (by ObjectID or GitHub username).
+// Assignee details are dynamically populated from the users collection if needed.
+func (s *TaskService) GetTasksByAssignee(ctx context.Context, userID primitive.ObjectID, username string, status domain.TaskStatus, repoID int64) ([]domain.Task, error) {
+	tasks, err := s.taskRepo.FindByAssignee(ctx, userID, username, status, repoID)
+	if err != nil {
+		return nil, fmt.Errorf("GetTasksByAssignee: %w", err)
+	}
+
+	var assigneeIDs []primitive.ObjectID
+	for _, t := range tasks {
+		if t.AssigneeID != nil {
+			assigneeIDs = append(assigneeIDs, *t.AssigneeID)
+		}
+	}
+
+	if len(assigneeIDs) > 0 {
+		userMap, err := s.userRepo.FindByObjectIDs(ctx, assigneeIDs)
+		if err == nil {
+			for i := range tasks {
+				if tasks[i].AssigneeID != nil {
+					if user, ok := userMap[*tasks[i].AssigneeID]; ok {
+						tasks[i].AssigneeUsername = user.Username
+						tasks[i].AssigneeAvatarURL = user.AvatarURL
+					}
+				}
+			}
+		}
+	}
+
+	return tasks, nil
+}
+
 // GetTaskByID retrieves a single task by its hex ObjectID string.
 // Assignee details are dynamically populated from the users collection.
 func (s *TaskService) GetTaskByID(ctx context.Context, id string) (*domain.Task, error) {

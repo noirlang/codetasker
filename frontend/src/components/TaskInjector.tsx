@@ -20,6 +20,8 @@ import {
   ChevronRight,
   CornerLeftUp,
   FileText,
+  Calendar,
+  User,
 } from 'lucide-react';
 import { tasksApi, reposApi } from '../api/client';
 import type { InjectTaskRequest, TaskLocation, ApiError, Issue, FileTreeNode } from '../types';
@@ -409,6 +411,8 @@ export default function TaskInjector({
   const [taskType,          setTaskType]          = useState('TODO');
   const [branch,            setBranch]            = useState('');
   const [selectedIssueUrl,  setSelectedIssueUrl]  = useState('');
+  const [dueDate,           setDueDate]           = useState('');
+  const [assigneeUsername,  setAssigneeUsername]  = useState('');
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -433,6 +437,8 @@ export default function TaskInjector({
       setTaskType('TODO');
       setBranch(defaultBranch || 'main');
       setSelectedIssueUrl('');
+      setDueDate('');
+      setAssigneeUsername('');
       setPrUrl(null);
       setFormError(null);
       setIsSubmitting(false);
@@ -525,15 +531,17 @@ export default function TaskInjector({
 
     const firstLoc = payloadLocations[0];
     const req: InjectTaskRequest = {
-      repo_owner:  repoOwner,
-      repo_name:   repoName,
-      file_path:   firstLoc.file_path,
-      line_number: firstLoc.line_number,
-      description: firstLoc.description,
-      branch:      branch.trim(),
-      type:        taskType,
-      issue_url:   selectedIssueUrl || undefined,
-      locations:   payloadLocations,
+      repo_owner:        repoOwner,
+      repo_name:         repoName,
+      file_path:         firstLoc.file_path,
+      line_number:       firstLoc.line_number,
+      description:       firstLoc.description,
+      branch:            branch.trim(),
+      type:              taskType,
+      issue_url:         selectedIssueUrl || undefined,
+      due_date:          dueDate.trim() || undefined,
+      assignee_username: assigneeUsername.trim() || undefined,
+      locations:         payloadLocations,
     };
 
     setIsSubmitting(true);
@@ -728,6 +736,43 @@ export default function TaskInjector({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Due Date & Assignee row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="section-label flex items-center gap-1" htmlFor="inj-due-date">
+                    <Calendar size={11} className="text-[#888888]" />
+                    <span>Due Date (Optional)</span>
+                  </label>
+                  <input
+                    id="inj-due-date"
+                    type="date"
+                    className="input text-xs [color-scheme:dark]"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="section-label flex items-center gap-1" htmlFor="inj-assignee">
+                    <User size={11} className="text-[#888888]" />
+                    <span>Assignee (Optional)</span>
+                  </label>
+                  <input
+                    id="inj-assignee"
+                    type="text"
+                    className="input font-mono text-xs"
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                    placeholder="e.g. username"
+                    value={assigneeUsername}
+                    onChange={(e) => setAssigneeUsername(e.target.value)}
+                    disabled={isSubmitting}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
               </div>
 
               {/* Locations section header */}

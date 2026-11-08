@@ -28,40 +28,16 @@ import {
   Plus,
   GitPullRequest,
   User,
-  X,
-  MessageSquare,
-  Send,
-  Trash2,
-  UserMinus,
   AlertCircle,
-  Check,
-  XCircle,
-  Lightbulb,
+  Calendar,
 } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
-import { commentsApi, proposalsApi, reposApi } from '../api/client';
+import { reposApi } from '../api/client';
 import { useAuthStore } from '../store/authStore';
-import type { Task, TaskStatus, PullRequest, Collaborator, Comment, Issue, TaskProposal, ProposalStatus } from '../types';
+import type { Task, TaskStatus, PullRequest, Collaborator, Issue } from '../types';
 import Badge from './ui/Badge';
 import Spinner from './ui/Spinner';
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Format an ISO timestamp as a relative time string */
-function timeAgo(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  if (seconds < 60) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return `${Math.floor(days / 7)}w ago`;
-}
+import TaskDetailModal from './TaskDetailModal';
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -105,599 +81,6 @@ function getIssueNumber(url?: string): string | null {
   return match ? `#${match[1]}` : 'Issue';
 }
 
-// ── Task Detail Modal (comments + assignee) ───────────────────────────────────
-
-function TaskDetailModal({
-  task,
-  collaborators,
-  currentUsername,
-  onClose,
-  onAssign,
-  onInjectClick,
-}: {
-  task: Task;
-  collaborators: Collaborator[];
-  currentUsername: string;
-  onClose: () => void;
-  onAssign: (taskId: string, username: string | null) => Promise<void>;
-  onInjectClick?: (lineNumber?: number, filePath?: string) => void;
-}) {
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [commentsLoading, setCommentsLoading] = useState(true);
-  const [newComment, setNewComment] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
-  const [assigning, setAssigning] = useState(false);
-  const [assigneeSearch, setAssigneeSearch] = useState('');
-
-  // Proposals & Discussions state
-  const [proposals, setProposals] = useState<TaskProposal[]>([]);
-  const [proposalsLoading, setProposalsLoading] = useState(true);
-  const [newPropTitle, setNewPropTitle] = useState('');
-  const [newPropContent, setNewPropContent] = useState('');
-  const [submittingProp, setSubmittingProp] = useState(false);
-  const [detailTab, setDetailTab] = useState<'comments' | 'proposals'>('comments');
-
-  // Local assignee state (for optimistic UI)
-  const [localAssignee, setLocalAssignee] = useState<string | null>(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (task as any).assignee_username ?? null
-  );
-
-  // Load comments on mount
-  useEffect(() => {
-    setCommentsLoading(true);
-    commentsApi
-      .list(task.id)
-      .then(setComments)
-      .catch(() => setComments([]))
-      .finally(() => setCommentsLoading(false));
-  }, [task.id]);
-
-  // Load proposals on mount
-  useEffect(() => {
-    setProposalsLoading(true);
-    proposalsApi
-      .list(task.id)
-      .then(setProposals)
-      .catch(() => setProposals([]))
-      .finally(() => setProposalsLoading(false));
-  }, [task.id]);
-
-  const handleAddComment = async () => {
-    const trimmed = newComment.trim();
-    if (!trimmed || submitting) return;
-    setSubmitting(true);
-    try {
-      const comment = await commentsApi.add(task.id, trimmed);
-      setComments((prev) => [...prev, comment]);
-      setNewComment('');
-    } catch {
-      // Silently fail
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteComment = async (commentId: string) => {
-    setComments((prev) => prev.filter((c) => c.id !== commentId));
-    try {
-      await commentsApi.delete(task.id, commentId);
-    } catch {
-      // Refetch on failure
-      commentsApi.list(task.id).then(setComments).catch(() => {});
-    }
-  };
-
-  const handleAddProposal = async () => {
-    if (!newPropTitle.trim() || submittingProp) return;
-    setSubmittingProp(true);
-    try {
-      const p = await proposalsApi.add(task.id, newPropTitle.trim(), newPropContent.trim());
-      setProposals((prev) => [p, ...prev]);
-      setNewPropTitle('');
-      setNewPropContent('');
-    } catch {
-      // Silently fail
-    } finally {
-      setSubmittingProp(false);
-    }
-  };
-
-  const handleVoteProposal = async (proposalId: string, status: ProposalStatus) => {
-    setProposals((prev) =>
-      prev.map((p) => (p.id === proposalId ? { ...p, status } : p))
-    );
-    try {
-      await proposalsApi.updateStatus(task.id, proposalId, status);
-    } catch {
-      proposalsApi.list(task.id).then(setProposals).catch(() => {});
-    }
-  };
-
-  const handleDeleteProposal = async (proposalId: string) => {
-    setProposals((prev) => prev.filter((p) => p.id !== proposalId));
-    try {
-      await proposalsApi.delete(task.id, proposalId);
-    } catch {
-      proposalsApi.list(task.id).then(setProposals).catch(() => {});
-    }
-  };
-
-  const handleAssign = async (username: string | null) => {
-    setAssigning(true);
-    setLocalAssignee(username);
-    setShowAssigneePicker(false);
-    try {
-      await onAssign(task.id, username);
-    } catch {
-      setLocalAssignee(null);
-    } finally {
-      setAssigning(false);
-    }
-  };
-
-  const shortSha = task.commit_sha.slice(0, 7);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="relative flex flex-col w-full max-w-lg max-h-[85vh] rounded border border-[#222222] bg-[#111111] shadow-2xl shadow-black/80 animate__animated animate__fadeInUp"
-        style={{ animationDuration: '0.2s' }}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-[#1a1a1a] px-5 py-4">
-          <div className="flex items-start gap-2 min-w-0">
-            <Badge type={task.type} />
-            <div className="min-w-0">
-              <p className="text-sm text-white font-medium leading-snug line-clamp-2">{task.content}</p>
-              <div className="mt-1.5 flex items-center gap-2">
-                <span className="rounded bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#888888]">{task.file_path}</span>
-                <span className="rounded bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-[#888888]">L{task.line_number}</span>
-                <span className="font-mono text-[10px] text-[#555555]">{shortSha}</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {onInjectClick && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onInjectClick(task.line_number, task.file_path);
-                }}
-                className="flex items-center gap-1 text-[10px] font-mono text-[#10b981] hover:text-white bg-[#10b981]/10 hover:bg-[#10b981]/30 border border-[#10b981]/30 rounded px-2 py-1 transition-all cursor-pointer"
-                title="Add a new line / task annotation to this file"
-              >
-                <Plus size={10} />
-                <span>Add Line</span>
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="shrink-0 rounded p-1 text-[#666666] hover:text-white transition-colors cursor-pointer"
-              aria-label="Close modal"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {/* Assignee section */}
-          <div className="border-b border-[#1a1a1a] px-5 py-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Assignee</span>
-              <button
-                onClick={() => setShowAssigneePicker((v) => !v)}
-                className="text-[9px] text-[#666666] hover:text-white border border-[#2a2a2a] hover:border-[#3a3a3a] px-1.5 py-0.5 rounded transition-all cursor-pointer font-mono"
-                disabled={assigning}
-              >
-                {assigning ? 'Assigning…' : 'Change'}
-              </button>
-            </div>
-
-            {/* Current assignee */}
-            <div className="mt-2 flex items-center gap-2">
-              {localAssignee ? (
-                <>
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#2a2a2a] border border-[#3a3a3a] shrink-0">
-                    <User size={11} className="text-[#a0a0a0]" />
-                  </div>
-                  <span className="text-[11px] text-white font-medium">{localAssignee}</span>
-                </>
-              ) : (
-                <>
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a] shrink-0">
-                    <User size={11} className="text-[#444444]" />
-                  </div>
-                  <span className="text-[11px] text-[#666666] italic">Unassigned</span>
-                </>
-              )}
-            </div>
-
-            {/* Assignee picker dropdown */}
-            {showAssigneePicker && (
-              <div className="mt-2 rounded border border-[#222222] bg-[#0d0d0d] p-2 flex flex-col gap-2">
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    value={assigneeSearch}
-                    onChange={(e) => setAssigneeSearch(e.target.value)}
-                    placeholder="Enter GitHub username..."
-                    className="flex-1 rounded border border-[#2a2a2a] bg-[#111111] px-2.5 py-1 text-xs text-white placeholder-[#555555] focus:outline-none focus:border-white"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && assigneeSearch.trim()) {
-                        e.preventDefault();
-                        handleAssign(assigneeSearch.trim());
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      if (assigneeSearch.trim()) {
-                        handleAssign(assigneeSearch.trim());
-                      }
-                    }}
-                    disabled={!assigneeSearch.trim()}
-                    className="btn-primary py-1 px-2.5 text-[10px] font-mono shrink-0 disabled:opacity-40"
-                  >
-                    Assign
-                  </button>
-                </div>
-
-                {/* Direct quick action: Assign to me */}
-                {currentUsername && (
-                  <button
-                    onClick={() => handleAssign(currentUsername)}
-                    className="flex items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-[#a0a0a0] hover:text-white hover:bg-[#161616] rounded transition-colors cursor-pointer"
-                  >
-                    <User size={12} className="text-[#a0a0a0]" />
-                    <span>Assign to me (@{currentUsername})</span>
-                  </button>
-                )}
-
-                {/* Clear assignee */}
-                {localAssignee && (
-                  <button
-                    onClick={() => handleAssign(null)}
-                    className="flex items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-red-400/80 hover:text-red-400 hover:bg-[#161616] rounded transition-colors cursor-pointer"
-                  >
-                    <UserMinus size={12} />
-                    <span>Clear assignee</span>
-                  </button>
-                )}
-
-                {/* Filtered Collaborator List */}
-                {collaborators.length > 0 && (
-                  <div className="border-t border-[#1a1a1a] pt-1.5 max-h-36 overflow-y-auto flex flex-col gap-1">
-                    {collaborators
-                      .filter((c) =>
-                        assigneeSearch.trim()
-                          ? c.username.toLowerCase().includes(assigneeSearch.trim().toLowerCase())
-                          : true
-                      )
-                      .map((c) => (
-                        <button
-                          key={c.id}
-                          onClick={() => handleAssign(c.username)}
-                          className={[
-                            'flex w-full items-center gap-2 px-2.5 py-1.5 rounded text-left transition-colors cursor-pointer',
-                            localAssignee === c.username
-                              ? 'bg-white/[0.06] text-white font-medium'
-                              : 'text-[#a0a0a0] hover:bg-[#161616] hover:text-white',
-                          ].join(' ')}
-                        >
-                          <img
-                            src={c.avatar_url}
-                            alt={c.username}
-                            className="h-4 w-4 rounded-full border border-[#2a2a2a] shrink-0"
-                          />
-                          <span className="text-[11px] truncate">{c.username}</span>
-                          <span className="ml-auto text-[9px] font-mono text-[#666666] capitalize">{c.role}</span>
-                        </button>
-                      ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Authorship & Maintainer metadata */}
-          <div className="border-b border-[#1a1a1a] px-5 py-3 flex flex-col gap-2.5">
-            {/* Created by */}
-            {task.created_by_username && (
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Created by</span>
-                <div className="flex items-center gap-1.5">
-                  {task.created_by_avatar_url ? (
-                    <img
-                      src={task.created_by_avatar_url}
-                      alt={task.created_by_username}
-                      className="h-4 w-4 rounded-full border border-[#2a2a2a] shrink-0"
-                    />
-                  ) : (
-                    <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a]">
-                      <User size={9} className="text-[#444444]" />
-                    </div>
-                  )}
-                  <span className="text-[11px] text-[#a0a0a0] font-mono">@{task.created_by_username}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Completed by */}
-            {task.completed_by_username && (
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Completed by</span>
-                <div className="flex items-center gap-1.5">
-                  {task.completed_by_avatar_url ? (
-                    <img
-                      src={task.completed_by_avatar_url}
-                      alt={task.completed_by_username}
-                      className="h-4 w-4 rounded-full border border-[#2a2a2a] shrink-0"
-                    />
-                  ) : (
-                    <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1a1a] border border-[#2a2a2a]">
-                      <User size={9} className="text-[#444444]" />
-                    </div>
-                  )}
-                  <span className="text-[11px] text-emerald-400 font-mono">@{task.completed_by_username}</span>
-                  {task.completed_at && (
-                    <span className="text-[9px] text-[#666666] font-mono">· {timeAgo(task.completed_at)}</span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Maintainer */}
-            {task.maintainer_username && (
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#666666]">Maintainer</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-400/10 border border-amber-400/20 text-[9px] font-mono text-amber-400">
-                    CODEOWNERS
-                  </span>
-                  <span className="text-[11px] text-amber-300 font-mono">@{task.maintainer_username}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-
-          {/* Tab Selection (Comments vs Proposals) */}
-          <div className="border-b border-[#1a1a1a] px-5 flex items-center gap-4 bg-[#0d0d0d]">
-            <button
-              onClick={() => setDetailTab('comments')}
-              className={`py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
-                detailTab === 'comments' ? 'border-white text-white' : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
-              }`}
-            >
-              <MessageSquare size={12} />
-              <span>Comments ({comments.length})</span>
-            </button>
-
-            <button
-              onClick={() => setDetailTab('proposals')}
-              className={`py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
-                detailTab === 'proposals' ? 'border-white text-white' : 'border-transparent text-[#666666] hover:text-[#a0a0a0]'
-              }`}
-            >
-              <Lightbulb size={12} />
-              <span>Proposals & Discussions ({proposals.length})</span>
-            </button>
-          </div>
-
-          {/* Comments Tab */}
-          {detailTab === 'comments' && (
-            <div className="px-5 py-4">
-              {commentsLoading ? (
-                <div className="flex justify-center py-4">
-                  <Spinner size={18} />
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {comments.length === 0 && (
-                    <p className="text-[11px] text-[#666666] py-2 text-center">No comments yet</p>
-                  )}
-                  {comments.map((comment) => (
-                    <div
-                      key={comment.id}
-                      className="rounded border border-[#1a1a1a] bg-[#0d0d0d] p-3"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2">
-                          {comment.avatar_url ? (
-                            <img
-                              src={comment.avatar_url}
-                              alt={comment.username}
-                              className="h-5 w-5 rounded-full border border-[#2a2a2a] shrink-0"
-                            />
-                          ) : (
-                            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#2a2a2a]">
-                              <User size={10} className="text-[#666666]" />
-                            </div>
-                          )}
-                          <span className="text-[11px] font-medium text-white">{comment.username}</span>
-                          <span className="text-[9px] text-[#666666] font-mono">{timeAgo(comment.created_at)}</span>
-                        </div>
-                        {comment.username === currentUsername && (
-                          <button
-                            onClick={() => handleDeleteComment(comment.id)}
-                            className="text-[#444444] hover:text-red-400 transition-colors cursor-pointer"
-                            title="Delete comment"
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-[#a0a0a0] leading-4 whitespace-pre-wrap">{comment.content}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Add comment */}
-              <div className="mt-3 flex flex-col gap-2">
-                <textarea
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a comment…"
-                  rows={2}
-                  className="w-full resize-none rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-2 text-[11px] text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a] transition-colors"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                      e.preventDefault();
-                      handleAddComment();
-                    }
-                  }}
-                />
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleAddComment}
-                    disabled={!newComment.trim() || submitting}
-                    className="flex items-center gap-1.5 rounded border border-[#2a2a2a] bg-white/[0.04] px-3 py-1.5 text-[10px] font-mono text-[#a0a0a0] hover:text-white hover:border-[#3a3a3a] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {submitting ? <Spinner size={11} /> : <Send size={10} />}
-                    Comment
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Proposals Tab */}
-          {detailTab === 'proposals' && (
-            <div className="px-5 py-4 flex flex-col gap-4">
-              {proposalsLoading ? (
-                <div className="flex justify-center py-4">
-                  <Spinner size={18} />
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {proposals.length === 0 && (
-                    <p className="text-[11px] text-[#666666] py-2 text-center">No proposals or task discussions yet.</p>
-                  )}
-                  {proposals.map((proposal) => (
-                    <div
-                      key={proposal.id}
-                      className="rounded border border-[#222222] bg-[#0d0d0d] p-3.5 flex flex-col gap-2"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <img
-                            src={proposal.avatar_url}
-                            alt={proposal.username}
-                            className="h-5 w-5 rounded-full border border-[#2a2a2a] shrink-0"
-                          />
-                          <span className="text-[11px] font-medium text-white truncate">{proposal.username}</span>
-                          <span className="text-[9px] text-[#666666] font-mono shrink-0">{timeAgo(proposal.created_at)}</span>
-                        </div>
-
-                        {/* Status Badge */}
-                        {proposal.status === 'approved' && (
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono flex items-center gap-1 shrink-0">
-                            <Check size={10} /> Approved
-                          </span>
-                        )}
-                        {proposal.status === 'rejected' && (
-                          <span className="px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-mono flex items-center gap-1 shrink-0">
-                            <XCircle size={10} /> Rejected
-                          </span>
-                        )}
-                        {proposal.status === 'pending' && (
-                          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono flex items-center gap-1 shrink-0">
-                            <Lightbulb size={10} /> Pending
-                          </span>
-                        )}
-                      </div>
-
-                      <div>
-                        <h4 className="text-xs font-semibold text-white">{proposal.title}</h4>
-                        {proposal.content && (
-                          <p className="mt-1 text-[11px] text-[#a0a0a0] leading-relaxed whitespace-pre-wrap">{proposal.content}</p>
-                        )}
-                      </div>
-
-                      {/* Vote & Action buttons */}
-                      <div className="flex items-center justify-between border-t border-[#1a1a1a] pt-2 mt-1">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleVoteProposal(proposal.id, 'approved')}
-                            className={`px-2.5 py-1 rounded text-[10px] font-mono flex items-center gap-1 border transition-all cursor-pointer ${
-                              proposal.status === 'approved'
-                                ? 'bg-emerald-500 text-black border-emerald-400 font-bold'
-                                : 'border-[#2a2a2a] text-emerald-400 hover:bg-emerald-500/10'
-                            }`}
-                          >
-                            <Check size={10} /> Approve
-                          </button>
-                          <button
-                            onClick={() => handleVoteProposal(proposal.id, 'rejected')}
-                            className={`px-2.5 py-1 rounded text-[10px] font-mono flex items-center gap-1 border transition-all cursor-pointer ${
-                              proposal.status === 'rejected'
-                                ? 'bg-red-500 text-white border-red-400 font-bold'
-                                : 'border-[#2a2a2a] text-red-400 hover:bg-red-500/10'
-                            }`}
-                          >
-                            <XCircle size={10} /> Reject
-                          </button>
-                        </div>
-
-                        {proposal.username === currentUsername && (
-                          <button
-                            onClick={() => handleDeleteProposal(proposal.id)}
-                            className="text-[#444444] hover:text-red-400 transition-colors p-1"
-                            title="Delete proposal"
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Add Proposal Form */}
-              <div className="mt-2 rounded border border-[#222222] bg-[#161616] p-3 flex flex-col gap-2">
-                <h4 className="text-xs font-semibold text-white flex items-center gap-1">
-                  <Lightbulb size={12} className="text-amber-400" /> Start New Proposal / Discussion
-                </h4>
-                <input
-                  type="text"
-                  value={newPropTitle}
-                  onChange={(e) => setNewPropTitle(e.target.value)}
-                  placeholder="Proposal Title (e.g., Refactor Auth Service)"
-                  className="w-full rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-1.5 text-xs text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a]"
-                />
-                <textarea
-                  value={newPropContent}
-                  onChange={(e) => setNewPropContent(e.target.value)}
-                  placeholder="Proposal details and rationale…"
-                  rows={2}
-                  className="w-full resize-none rounded border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-1.5 text-[11px] text-white placeholder-[#444444] focus:outline-none focus:border-[#3a3a3a]"
-                />
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleAddProposal}
-                    disabled={!newPropTitle.trim() || submittingProp}
-                    className="btn-primary py-1 px-3 text-xs font-medium"
-                  >
-                    {submittingProp ? <Spinner size={11} /> : 'Submit Proposal'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Task Card ────────────────────────────────────────────────────────────────
 
@@ -808,6 +191,26 @@ function TaskCard({
                 {assigneeUsername ?? 'Unassigned'}
               </span>
             </div>
+
+            {/* Due date badge if set */}
+            {task.due_date && (
+              <div
+                className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-mono shrink-0 ${
+                  new Date(task.due_date) < new Date() && task.status !== 'resolved'
+                    ? 'border-red-500/40 bg-red-500/10 text-red-400 font-semibold'
+                    : 'border-[#2a2a2a] bg-[#1a1a1a] text-[#888888]'
+                }`}
+                title={new Date(task.due_date) < new Date() && task.status !== 'resolved' ? 'Overdue!' : 'Due Date'}
+              >
+                <Calendar size={9} className={new Date(task.due_date) < new Date() && task.status !== 'resolved' ? 'text-red-400' : 'text-[#666666]'} />
+                <span>
+                  {new Date(task.due_date).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </span>
+              </div>
+            )}
 
             {/* Creator avatar (right side) */}
             {task.created_by_username && (
@@ -1085,6 +488,26 @@ function TaskListItem({
       </div>
 
       <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+        {/* Due date badge if set */}
+        {task.due_date && (
+          <div
+            className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-mono shrink-0 ${
+              new Date(task.due_date) < new Date() && task.status !== 'resolved'
+                ? 'border-red-500/40 bg-red-500/10 text-red-400 font-semibold'
+                : 'border-[#2a2a2a] bg-[#1a1a1a] text-[#888888]'
+            }`}
+            title={new Date(task.due_date) < new Date() && task.status !== 'resolved' ? 'Overdue!' : 'Due Date'}
+          >
+            <Calendar size={9} className={new Date(task.due_date) < new Date() && task.status !== 'resolved' ? 'text-red-400' : 'text-[#666666]'} />
+            <span>
+              {new Date(task.due_date).toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+              })}
+            </span>
+          </div>
+        )}
+
         {/* Assignee chip */}
         <button
           onClick={() => onOpenDetail(task)}
@@ -1283,7 +706,7 @@ export default function TaskBoard({
   onLinkTaskToPR,
   onLinkTaskToIssue,
 }: TaskBoardProps) {
-  const { tasks, isLoading, error, fetchTasks, updateTaskStatus, updateTaskAssignee } =
+  const { tasks, isLoading, error, fetchTasks, updateTaskStatus, updateTaskAssignee, updateTaskDueDate } =
     useTaskStore();
 
   const currentUser = useAuthStore((s) => s.user);
@@ -1336,6 +759,22 @@ export default function TaskBoard({
       // Silently fail
     }
   }, [updateTaskAssignee]);
+
+  const handleDueDateChange = useCallback(async (taskId: string, dueDate: string | null) => {
+    try {
+      await updateTaskDueDate(taskId, dueDate);
+    } catch {
+      // Silently fail
+    }
+  }, [updateTaskDueDate]);
+
+  const handleStatusChange = useCallback(async (taskId: string, status: TaskStatus) => {
+    try {
+      await updateTaskStatus(taskId, status);
+    } catch {
+      // Silently fail
+    }
+  }, [updateTaskStatus]);
 
   // ── Partition tasks into columns ────────────────────────────────────────
 
@@ -1453,7 +892,7 @@ export default function TaskBoard({
         </div>
       </div>
 
-      {/* Task detail modal (assignee + comments) */}
+      {/* Task detail modal (assignee + comments + due date + status) */}
       {detailTask && (
         <TaskDetailModal
           task={tasks.find((t) => t.id === detailTask.id) || detailTask}
@@ -1461,7 +900,10 @@ export default function TaskBoard({
           currentUsername={currentUser?.username ?? ''}
           onClose={() => setDetailTask(null)}
           onAssign={handleAssign}
+          onDueDateChange={handleDueDateChange}
+          onStatusChange={handleStatusChange}
           onInjectClick={onInjectClick}
+          onTaskUpdated={(updated) => setDetailTask(updated)}
         />
       )}
     </>

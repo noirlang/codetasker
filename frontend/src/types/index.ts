@@ -80,6 +80,7 @@ export interface Task {
   assignee_id?: string;
   assignee_username?: string;
   assignee_avatar_url?: string;
+  due_date?: string;
   // Authorship tracking
   created_by_username?: string;
   created_by_avatar_url?: string;
@@ -134,7 +135,20 @@ export interface InjectTaskRequest {
   branch: string;
   type: string;
   issue_url?: string;
+  due_date?: string;
+  assignee_username?: string;
   locations?: TaskLocation[];
+}
+
+/** Payload sent to PATCH /api/tasks/:id to update task status, links, assignee, or deadline */
+export interface UpdateTaskRequest {
+  status?: TaskStatus;
+  pr_url?: string;
+  issue_url?: string;
+  assignee_username?: string;
+  clear_assignee?: boolean;
+  due_date?: string | null;
+  clear_due_date?: boolean;
 }
 
 /* ── API Error ────────────────────────────────────────────── */

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/codetasker/backend/internal/cli/client"
@@ -116,6 +117,9 @@ var taskListCmd = &cobra.Command{
 			meta = append(meta, fmt.Sprintf("id: %s", t.ID.Hex()))
 			if t.AssigneeUsername != "" {
 				meta = append(meta, fmt.Sprintf("assignee: @%s", t.AssigneeUsername))
+			}
+			if t.DueDate != nil {
+				meta = append(meta, fmt.Sprintf("due: %s", t.DueDate.Format("2006-01-02")))
 			}
 			if t.PullRequestURL != "" {
 				meta = append(meta, "pr linked")
@@ -499,6 +503,29 @@ var taskUpdateCmd = &cobra.Command{
 			}
 		}
 
+		if cmd.Flags().Changed("due") {
+			dueStr, _ := cmd.Flags().GetString("due")
+			var dueTime *time.Time
+			if dueStr != "" {
+				t, err := time.Parse("2006-01-02", dueStr)
+				if err != nil {
+					t, err = time.Parse(time.RFC3339, dueStr)
+					if err != nil {
+						return fmt.Errorf("invalid due date format '%s'. Use YYYY-MM-DD", dueStr)
+					}
+				}
+				dueTime = &t
+			}
+			if err := api.UpdateTaskDueDate(ctx, taskID, dueTime); err != nil {
+				return fmt.Errorf("update due date: %w", err)
+			}
+			if dueTime == nil {
+				fmt.Println(ui.SuccessStyle.Render("✓ Due date cleared."))
+			} else {
+				fmt.Printf("%s Task due date set to %s\n", ui.SuccessStyle.Render("✓"), dueTime.Format("2006-01-02"))
+			}
+		}
+
 		return nil
 	},
 }
@@ -578,6 +605,7 @@ func init() {
 
 	taskUpdateCmd.Flags().String("status", "", "New task status (open, in_progress, resolved)")
 	taskUpdateCmd.Flags().StringP("assign", "a", "", "Assign to GitHub username (empty to unassign)")
+	taskUpdateCmd.Flags().StringP("due", "d", "", "Set due date (YYYY-MM-DD, empty to clear)")
 
 	taskCommentCmd.AddCommand(taskCommentAddCmd)
 	taskCommentCmd.AddCommand(taskCommentListCmd)
