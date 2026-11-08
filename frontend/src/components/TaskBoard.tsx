@@ -30,6 +30,7 @@ import {
   User,
   AlertCircle,
   Calendar,
+  MessageSquare,
 } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
 import { reposApi } from '../api/client';
@@ -128,11 +129,9 @@ function TaskCard({
           ].join(' ')}
           onClick={() => {
             if (onTaskClick) onTaskClick(task.file_path, task.line_number);
-            if (task.status === 'open') {
-              onInjectClick(task.line_number, task.file_path);
-            }
+            onOpenDetail(task);
           }}
-          title={task.status === 'open' ? 'Click to view code and add/inject line' : 'Click to view code at this line'}
+          title="Click to view code, comments & details"
         >
           {/* Top row: type badge + file path & line */}
           <div className="flex min-w-0 items-center justify-between gap-2">
@@ -240,12 +239,27 @@ function TaskCard({
 
           {/* Footer: commit SHA + PR / Issue Link */}
           <div className="border-t border-[#2a2a2a] pt-2 flex items-center justify-between">
-            <span
-              className="font-mono text-[9px] text-[#666666]"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              {shortSha}
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className="font-mono text-[9px] text-[#666666]"
+                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                {shortSha}
+              </span>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenDetail(task);
+                }}
+                className="flex items-center gap-1 text-[9px] font-mono text-[#777777] hover:text-white transition-colors cursor-pointer px-1 py-0.5 rounded border border-transparent hover:border-[#333333]"
+                title="Open comments & details"
+              >
+                <MessageSquare size={9} />
+                <span>Comments</span>
+              </button>
+            </div>
 
             <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
               {task.pr_url ? (
@@ -452,11 +466,9 @@ function TaskListItem({
       className="card flex items-center justify-between gap-3 px-3 py-2.5 transition-colors duration-150 hover:border-[#3a3a3a] cursor-pointer"
       onClick={() => {
         if (onTaskClick) onTaskClick(task.file_path, task.line_number);
-        if (task.status === 'open') {
-          onInjectClick(task.line_number, task.file_path);
-        }
+        onOpenDetail(task);
       }}
-      title={task.status === 'open' ? 'Click to view code and add/inject line' : 'Click to view code at this line'}
+      title="Click to view code, comments & details"
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <Badge type={task.type} />
@@ -518,6 +530,16 @@ function TaskListItem({
           <span className={assigneeUsername ? 'text-[#a0a0a0]' : 'text-[#444444] italic'}>
             {assigneeUsername ?? 'None'}
           </span>
+        </button>
+
+        {/* Comments button */}
+        <button
+          onClick={() => onOpenDetail(task)}
+          className="flex items-center gap-1 text-[9px] font-mono border border-[#1a1a1a] hover:border-[#2a2a2a] text-[#888888] hover:text-white rounded px-1.5 py-0.5 transition-all cursor-pointer"
+          title="Open comments & details"
+        >
+          <MessageSquare size={9} />
+          <span>Comments</span>
         </button>
 
         {/* PR Linkage */}
